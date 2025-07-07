@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { dataService } from '@/services/dataService';
-import { IndJob, IndTransactionRecord, IndBillitemRecord } from '@/types';
+import { IndJob } from '@/lib/types';
 
 export function useJobs() {
   const [jobs, setJobs] = useState<IndJob[]>([]);
@@ -8,105 +8,63 @@ export function useJobs() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+    
+    const loadJobs = async () => {
+      try {
+        setLoading(true);
+        const loadedJobs = await dataService.loadJobs();
+        if (mounted) {
+          setJobs(loadedJobs);
+          setError(null);
+        }
+      } catch (err) {
+        if (mounted) {
+          setError(err instanceof Error ? err.message : 'Failed to load jobs');
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadJobs();
+
+    // Set up subscription for updates
     const unsubscribe = dataService.subscribe(() => {
-      setJobs(dataService.getJobs());
+      if (mounted) {
+        const currentJobs = dataService.getJobs();
+        setJobs(prevJobs => {
+          // Only update if the jobs have actually changed
+          const prevJson = JSON.stringify(prevJobs);
+          const currentJson = JSON.stringify(currentJobs);
+          return prevJson !== currentJson ? currentJobs : prevJobs;
+        });
+      }
     });
 
-    // Initial load
-    setJobs(dataService.getJobs());
-    setLoading(false);
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, []); // Empty dependency array ensures this only runs once on mount
 
-    return unsubscribe;
-  }, []);
-
-  const createJob = (job: Omit<IndJob, 'id' | 'created' | 'updated'>) => {
-    try {
-      return dataService.createJob(job);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create job');
-      throw err;
-    }
-  };
-
-  const updateJob = (id: string, updates: Partial<IndJob>) => {
-    try {
-      return dataService.updateJob(id, updates);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update job');
-      throw err;
-    }
-  };
-
-  const deleteJob = (id: string) => {
-    try {
-      return dataService.deleteJob(id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete job');
-      throw err;
-    }
-  };
-
-  const createTransaction = (jobId: string, transaction: Omit<IndTransactionRecord, 'id' | 'created' | 'updated' | 'job'>, type: 'income' | 'expenditure') => {
-    try {
-      return dataService.createTransaction(jobId, transaction, type);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create transaction');
-      throw err;
-    }
-  };
-
-  const createMultipleTransactions = (jobId: string, transactions: Omit<IndTransactionRecord, 'id' | 'created' | 'updated' | 'job'>[], type: 'income' | 'expenditure') => {
-    try {
-      return dataService.createMultipleTransactions(jobId, transactions, type);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create transactions');
-      throw err;
-    }
-  };
-
-  const updateTransaction = (transactionId: string, updates: Partial<IndTransactionRecord>) => {
-    try {
-      return dataService.updateTransaction(transactionId, updates);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update transaction');
-      throw err;
-    }
-  };
-
-  const deleteTransaction = (transactionId: string) => {
-    try {
-      return dataService.deleteTransaction(transactionId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete transaction');
-      throw err;
-    }
-  };
-
-  const createBillItem = (jobId: string, billItem: Omit<IndBillitemRecord, 'id' | 'created' | 'updated'>) => {
-    try {
-      return dataService.createBillItem(jobId, billItem);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create bill item');
-      throw err;
-    }
-  };
-
-  const createMultipleBillItems = (jobId: string, billItems: Omit<IndBillitemRecord, 'id' | 'created' | 'updated'>[]) => {
-    try {
-      return dataService.createMultipleBillItems(jobId, billItems);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create bill items');
-      throw err;
-    }
-  };
+  // Memoize the methods to prevent unnecessary re-renders
+  const createJob = useCallback(dataService.createJob.bind(dataService), []);
+  const updateJob = useCallback(dataService.updateJob.bind(dataService), []);
+  const deleteJob = useCallback(dataService.deleteJob.bind(dataService), []);
+  const createTransaction = useCallback(dataService.createTransaction.bind(dataService), []);
+  const createMultipleTransactions = useCallback(dataService.createMultipleTransactions.bind(dataService), []);
+  const updateTransaction = useCallback(dataService.updateTransaction.bind(dataService), []);
+  const deleteTransaction = useCallback(dataService.deleteTransaction.bind(dataService), []);
+  const createBillItem = useCallback(dataService.createBillItem.bind(dataService), []);
+  const createMultipleBillItems = useCallback(dataService.createMultipleBillItems.bind(dataService), []);
 
   return {
     jobs,
     loading,
     error,
-    setJobs,
-    setLoading,
-    setError,
     createJob,
     updateJob,
     deleteJob,
@@ -115,23 +73,30 @@ export function useJobs() {
     updateTransaction,
     deleteTransaction,
     createBillItem,
-    createMultipleBillItems,
+    createMultipleBillItems
   };
 }
 
-export function useJob(id: string) {
-  const [job, setJob] = useState<IndJob | undefined>();
+export function useJob(jobId: string | null) {
+  const [job, setJob] = useState<IndJob | null>(null);
 
   useEffect(() => {
-    const unsubscribe = dataService.subscribe(() => {
-      setJob(dataService.getJob(id));
-    });
+    if (!jobId) {
+      setJob(null);
+      return;
+    }
 
-    // Initial load
-    setJob(dataService.getJob(id));
+    const updateJob = () => {
+      setJob(dataService.getJob(jobId));
+    };
 
-    return unsubscribe;
-  }, [id]);
+    updateJob();
 
-  return { job, setJob };
+    const unsubscribe = dataService.subscribe(updateJob);
+    return () => {
+      unsubscribe();
+    };
+  }, [jobId]);
+
+  return job;
 }

@@ -1,14 +1,23 @@
-import { IndJob, IndTransactionRecord, IndBillitemRecord } from '@/types';
+import { IndJob } from '@/lib/types';
+import { IndJobRecord, IndJobRecordNoId, IndTransactionRecord, IndTransactionRecordNoId, IndBillitemRecord, IndBillitemRecordNoId } from '@/lib/pbtypes';
+import * as jobService from './jobService';
+import * as transactionService from './transactionService';
+import * as billItemService from './billItemService';
+import { adminLogin } from '@/lib/pocketbase';
 
-type DataChangeListener = () => void;
-
-class DataService {
+export class DataService {
   private static instance: DataService;
   private jobs: IndJob[] = [];
-  private listeners: DataChangeListener[] = [];
+  private listeners: Set<() => void> = new Set();
+  private loadPromise: Promise<IndJob[]> | null = null;
+  private initialized: Promise<void>;
 
   private constructor() {
-    this.loadJobs();
+    // Initialize with admin login
+    this.initialized = adminLogin().catch(error => {
+      console.error('Failed to initialize DataService:', error);
+      throw error;
+    });
   }
 
   public static getInstance(): DataService {
@@ -18,223 +27,266 @@ class DataService {
     return DataService.instance;
   }
 
-  subscribe(listener: DataChangeListener) {
-    this.listeners.push(listener);
-    return () => {
-      this.listeners = this.listeners.filter(l => l !== listener);
-    };
+  subscribe(listener: () => void) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
 
   private notifyListeners() {
     this.listeners.forEach(listener => listener());
   }
 
-  loadJobs() {
-    const stored = localStorage.getItem('eve-industry-jobs');
-    if (stored) {
-      try {
-        this.jobs = JSON.parse(stored);
-      } catch (error) {
-        console.error('Failed to load jobs from localStorage:', error);
-        this.jobs = [];
-      }
-    }
-  }
-
-  private saveJobs() {
-    localStorage.setItem('eve-industry-jobs', JSON.stringify(this.jobs));
-  }
-
   getJobs(): IndJob[] {
     return [...this.jobs];
   }
 
-  getJob(id: string): IndJob | undefined {
-    return this.jobs.find(job => job.id === id);
+  getJob(id: string): IndJob | null {
+    return this.jobs.find(job => job.id === id) || null;
   }
 
-  createJob(job: Omit<IndJob, 'id' | 'created' | 'updated'>): IndJob {
-    const newJob: IndJob = {
-      ...job,
-      id: crypto.randomUUID(),
-      created: new Date().toISOString(),
-      updated: new Date().toISOString(),
-      billOfMaterials: job.billOfMaterials || [],
-      consumedMaterials: job.consumedMaterials || [],
-      expenditures: job.expenditures || [],
-      income: job.income || [],
-    };
-    
+  async loadJobs(): Promise<IndJob[]> {
+    // Wait for initialization first
+    await this.initialized;
+
+    // If there's already a load in progress, return that promise
+    if (this.loadPromise) {
+      return this.loadPromise;
+    }
+
+    // If we already have jobs loaded, return them immediately
+    if (this.jobs.length > 0) {
+      return Promise.resolve(this.getJobs());
+    }
+
+    // Start a new load
+    console.log('Loading jobs from database');
+    this.loadPromise = jobService.getJobs().then(jobs => {
+      this.jobs = jobs;
+      this.notifyListeners();
+      return this.getJobs();
+    }).finally(() => {
+      this.loadPromise = null;
+    });
+
+    return this.loadPromise;
+  }
+
+  async createJob(jobData: IndJobRecordNoId): Promise<IndJob> {
+    console.log('Creating job:', jobData);
+    const newJob = await jobService.createJob(jobData);
     this.jobs.push(newJob);
-    this.saveJobs();
     this.notifyListeners();
     return newJob;
   }
 
-  updateJob(id: string, updates: Partial<IndJob>): IndJob | null {
-    const index = this.jobs.findIndex(job => job.id === id);
-    if (index === -1) return null;
+  async updateJob(id: string, updates: Partial<IndJobRecord>): Promise<IndJob> {
+    console.log('Updating job:', id, updates);
+    const updatedRecord = await jobService.updateJob(id, updates);
 
-    this.jobs[index] = {
-      ...this.jobs[index],
-      ...updates,
-      updated: new Date().toISOString(),
-    };
-    
-    this.saveJobs();
+    const jobIndex = this.jobs.findIndex(job => job.id === id);
+    if (jobIndex !== -1) {
+      this.jobs[jobIndex] = updatedRecord;
+      this.notifyListeners();
+      return this.jobs[jobIndex];
+    }
+
+    throw new Error(`Job with id ${id} not found in local state`);
+  }
+
+  async deleteJob(id: string): Promise<void> {
+    console.log('Deleting job:', id);
+    await jobService.deleteJob(id);
+
+    this.jobs = this.jobs.filter(job => job.id !== id);
     this.notifyListeners();
-    return this.jobs[index];
   }
 
-  deleteJob(id: string): boolean {
-    const index = this.jobs.findIndex(job => job.id === id);
-    if (index === -1) return false;
+  async createTransaction(jobId: string, transaction: IndTransactionRecordNoId, type: 'expenditure' | 'income'): Promise<IndJob> {
+    console.log('Creating transaction for job:', jobId, transaction, type);
 
-    this.jobs.splice(index, 1);
-    this.saveJobs();
-    this.notifyListeners();
-    return true;
-  }
-
-  createTransaction(jobId: string, transaction: Omit<IndTransactionRecord, 'id' | 'created' | 'updated' | 'job'>, type: 'income' | 'expenditure'): IndTransactionRecord | null {
     const job = this.getJob(jobId);
-    if (!job) return null;
+    if (!job) throw new Error(`Job with id ${jobId} not found`);
 
-    const newTransaction: IndTransactionRecord = {
-      ...transaction,
-      id: crypto.randomUUID(),
-      job: jobId,
-      created: new Date().toISOString(),
-      updated: new Date().toISOString(),
-    };
+    // Create the transaction in the database
+    transaction.job = jobId;
+    const createdTransaction = await transactionService.createTransaction(job, transaction);
 
-    if (type === 'income') {
-      job.income = job.income || [];
-      job.income.push(newTransaction);
-    } else {
-      job.expenditures = job.expenditures || [];
-      job.expenditures.push(newTransaction);
+    // Update the job's transaction references in the database
+    const field = type === 'expenditure' ? 'expenditures' : 'income';
+    const currentIds = (job[field] || []).map(tr => tr.id);
+    await jobService.updateJob(jobId, {
+      [field]: [...currentIds, createdTransaction.id]
+    });
+
+    // Fetch fresh job data from the server
+    const updatedJob = await jobService.getJob(jobId);
+    if (!updatedJob) throw new Error(`Job with id ${jobId} not found after update`);
+
+    // Update local state with fresh data
+    const jobIndex = this.jobs.findIndex(j => j.id === jobId);
+    if (jobIndex !== -1) {
+      this.jobs[jobIndex] = updatedJob;
+      this.notifyListeners();
+      return this.jobs[jobIndex];
     }
 
-    this.updateJob(jobId, job);
-    return newTransaction;
+    throw new Error(`Job with id ${jobId} not found in local state`);
   }
 
-  createMultipleTransactions(jobId: string, transactions: Omit<IndTransactionRecord, 'id' | 'created' | 'updated' | 'job'>[], type: 'income' | 'expenditure'): IndTransactionRecord[] {
+  async createMultipleTransactions(jobId: string, transactions: IndTransactionRecordNoId[], type: 'expenditure' | 'income'): Promise<IndJob> {
+    console.log('Creating multiple transactions for job:', jobId, transactions.length, type);
+
     const job = this.getJob(jobId);
-    if (!job) return [];
+    if (!job) throw new Error(`Job with id ${jobId} not found`);
 
-    const newTransactions = transactions.map(transaction => ({
-      ...transaction,
-      id: crypto.randomUUID(),
-      job: jobId,
-      created: new Date().toISOString(),
-      updated: new Date().toISOString(),
-    }));
+    const createdTransactions: IndTransactionRecord[] = [];
 
-    if (type === 'income') {
-      job.income = job.income || [];
-      job.income.push(...newTransactions);
-    } else {
-      job.expenditures = job.expenditures || [];
-      job.expenditures.push(...newTransactions);
+    // Create all transactions
+    for (const transaction of transactions) {
+      transaction.job = jobId;
+      const createdTransaction = await transactionService.createTransaction(job, transaction);
+      createdTransactions.push(createdTransaction);
     }
 
-    this.updateJob(jobId, job);
-    return newTransactions;
-  }
+    // Update the job's transaction references in one database call
+    const field = type === 'expenditure' ? 'expenditures' : 'income';
+    const currentIds = (job[field] || []).map(tr => tr.id);
+    const newIds = createdTransactions.map(tr => tr.id);
+    await jobService.updateJob(jobId, {
+      [field]: [...currentIds, ...newIds]
+    });
 
-  updateTransaction(transactionId: string, updates: Partial<IndTransactionRecord>): IndTransactionRecord | null {
-    for (const job of this.jobs) {
-      // Check income transactions
-      if (job.income) {
-        const incomeIndex = job.income.findIndex(t => t.id === transactionId);
-        if (incomeIndex !== -1) {
-          job.income[incomeIndex] = {
-            ...job.income[incomeIndex],
-            ...updates,
-            updated: new Date().toISOString(),
-          };
-          this.updateJob(job.id, job);
-          return job.income[incomeIndex];
-        }
-      }
+    // Fetch fresh job data from the server
+    const updatedJob = await jobService.getJob(jobId);
+    if (!updatedJob) throw new Error(`Job with id ${jobId} not found after update`);
 
-      // Check expenditure transactions
-      if (job.expenditures) {
-        const expIndex = job.expenditures.findIndex(t => t.id === transactionId);
-        if (expIndex !== -1) {
-          job.expenditures[expIndex] = {
-            ...job.expenditures[expIndex],
-            ...updates,
-            updated: new Date().toISOString(),
-          };
-          this.updateJob(job.id, job);
-          return job.expenditures[expIndex];
-        }
-      }
+    // Update local state with fresh data
+    const jobIndex = this.jobs.findIndex(j => j.id === jobId);
+    if (jobIndex !== -1) {
+      this.jobs[jobIndex] = updatedJob;
+      this.notifyListeners();
+      return this.jobs[jobIndex];
     }
-    return null;
+
+    throw new Error(`Job with id ${jobId} not found in local state`);
   }
 
-  deleteTransaction(transactionId: string): boolean {
-    for (const job of this.jobs) {
-      // Check income transactions
-      if (job.income) {
-        const incomeIndex = job.income.findIndex(t => t.id === transactionId);
-        if (incomeIndex !== -1) {
-          job.income.splice(incomeIndex, 1);
-          this.updateJob(job.id, job);
-          return true;
-        }
-      }
+  async updateTransaction(jobId: string, transactionId: string, updates: Partial<IndTransactionRecord>): Promise<IndJob> {
+    console.log('Updating transaction:', transactionId, updates);
 
-      // Check expenditure transactions
-      if (job.expenditures) {
-        const expIndex = job.expenditures.findIndex(t => t.id === transactionId);
-        if (expIndex !== -1) {
-          job.expenditures.splice(expIndex, 1);
-          this.updateJob(job.id, job);
-          return true;
-        }
-      }
+    const job = this.getJob(jobId);
+    if (!job) throw new Error(`Job with id ${jobId} not found`);
+
+    const updatedTransaction = await transactionService.updateTransaction(job, transactionId, updates);
+
+    // Fetch fresh job data from the server
+    const updatedJob = await jobService.getJob(jobId);
+    if (!updatedJob) throw new Error(`Job with id ${jobId} not found after update`);
+
+    // Update local state with fresh data
+    const jobIndex = this.jobs.findIndex(j => j.id === jobId);
+    if (jobIndex !== -1) {
+      this.jobs[jobIndex] = updatedJob;
+      this.notifyListeners();
+      return this.jobs[jobIndex];
     }
-    return false;
+
+    throw new Error(`Job with id ${jobId} not found in local state`);
   }
 
-  createBillItem(jobId: string, billItem: Omit<IndBillitemRecord, 'id' | 'created' | 'updated'>): IndBillitemRecord | null {
+  async deleteTransaction(jobId: string, transactionId: string): Promise<IndJob> {
+    console.log('Deleting transaction:', transactionId);
+
     const job = this.getJob(jobId);
-    if (!job) return null;
+    if (!job) throw new Error(`Job with id ${jobId} not found`);
 
-    const newBillItem: IndBillitemRecord = {
-      ...billItem,
-      id: crypto.randomUUID(),
-      created: new Date().toISOString(),
-      updated: new Date().toISOString(),
-    };
+    await transactionService.deleteTransaction(job, transactionId);
 
-    job.billOfMaterials = job.billOfMaterials || [];
-    job.billOfMaterials.push(newBillItem);
-    this.updateJob(jobId, job);
-    return newBillItem;
+    // Fetch fresh job data from the server
+    const updatedJob = await jobService.getJob(jobId);
+    if (!updatedJob) throw new Error(`Job with id ${jobId} not found after update`);
+
+    // Update local state with fresh data
+    const jobIndex = this.jobs.findIndex(j => j.id === jobId);
+    if (jobIndex !== -1) {
+      this.jobs[jobIndex] = updatedJob;
+      this.notifyListeners();
+      return this.jobs[jobIndex];
+    }
+
+    throw new Error(`Job with id ${jobId} not found in local state`);
   }
 
-  createMultipleBillItems(jobId: string, billItems: Omit<IndBillitemRecord, 'id' | 'created' | 'updated'>[]): IndBillitemRecord[] {
+  async createBillItem(jobId: string, billItem: IndBillitemRecordNoId, type: 'billOfMaterials' | 'consumedMaterials'): Promise<IndJob> {
+    console.log('Creating bill item for job:', jobId, billItem, type);
+
     const job = this.getJob(jobId);
-    if (!job) return [];
+    if (!job) throw new Error(`Job with id ${jobId} not found`);
 
-    const newBillItems = billItems.map(item => ({
-      ...item,
-      id: crypto.randomUUID(),
-      created: new Date().toISOString(),
-      updated: new Date().toISOString(),
-    }));
+    const createdBillItem = await billItemService.addBillItem(jobId, billItem);
 
-    job.billOfMaterials = job.billOfMaterials || [];
-    job.billOfMaterials.push(...newBillItems);
-    this.updateJob(jobId, job);
-    return newBillItems;
+    // Update the job's bill item references
+    const currentIds = (job[type] || []).map(item => item.id);
+    await jobService.updateJob(jobId, {
+      [type]: [...currentIds, createdBillItem.id]
+    });
+
+    // Fetch fresh job data from the server
+    const updatedJob = await jobService.getJob(jobId);
+    if (!updatedJob) throw new Error(`Job with id ${jobId} not found after update`);
+
+    // Update local state with fresh data
+    const jobIndex = this.jobs.findIndex(j => j.id === jobId);
+    if (jobIndex !== -1) {
+      this.jobs[jobIndex] = updatedJob;
+      this.notifyListeners();
+      return this.jobs[jobIndex];
+    }
+
+    throw new Error(`Job with id ${jobId} not found in local state`);
+  }
+
+  async createMultipleBillItems(jobId: string, billItems: IndBillitemRecordNoId[], type: 'billOfMaterials' | 'consumedMaterials'): Promise<IndJob> {
+    console.log('Creating multiple bill items for job:', jobId, billItems.length, type);
+
+    const job = this.getJob(jobId);
+    if (!job) throw new Error(`Job with id ${jobId} not found`);
+
+    // Delete existing bill items
+    const existingItemIds = job[type].map(item => item.id);
+    if (existingItemIds.length > 0) {
+      await billItemService.deleteBillItems(existingItemIds);
+    }
+
+    const createdBillItems: IndBillitemRecord[] = [];
+
+    // Create all bill items
+    for (const billItem of billItems) {
+      const createdBillItem = await billItemService.addBillItem(jobId, billItem);
+      createdBillItems.push(createdBillItem);
+    }
+
+    // Update the job's bill item references with ONLY the new IDs
+    const newIds = createdBillItems.map(item => item.id);
+    await jobService.updateJob(jobId, {
+      [type]: newIds // Replace instead of append
+    });
+
+    // Fetch fresh job data from the server
+    const updatedJob = await jobService.getJob(jobId);
+    if (!updatedJob) throw new Error(`Job with id ${jobId} not found after update`);
+
+    // Update local state with fresh data
+    const jobIndex = this.jobs.findIndex(j => j.id === jobId);
+    if (jobIndex !== -1) {
+      this.jobs[jobIndex] = updatedJob;
+      this.notifyListeners();
+      return this.jobs[jobIndex];
+    }
+
+    throw new Error(`Job with id ${jobId} not found in local state`);
   }
 }
 
+// Export singleton instance
 export const dataService = DataService.getInstance();

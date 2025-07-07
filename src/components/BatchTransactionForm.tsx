@@ -1,0 +1,369 @@
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { parseTransactionLine, formatISK } from '@/utils/priceUtils';
+import { IndTransactionRecordNoId, IndJobStatusOptions } from '@/lib/pbtypes';
+import { IndJob } from '@/lib/types';
+import { X } from 'lucide-react';
+
+interface BatchTransactionFormProps {
+  onClose: () => void;
+  onTransactionsAssigned: (assignments: { jobId: string, transactions: IndTransactionRecordNoId[] }[]) => void;
+  jobs: IndJob[];
+}
+
+interface ParsedTransaction extends IndTransactionRecordNoId {
+  assignedJobId?: string;
+  isDuplicate?: boolean;
+}
+
+interface TransactionGroup {
+  itemName: string;
+  transactions: ParsedTransaction[];
+  totalQuantity: number;
+  totalValue: number;
+}
+
+const BatchTransactionForm: React.FC<BatchTransactionFormProps> = ({ onClose, onTransactionsAssigned, jobs }) => {
+  const [pastedData, setPastedData] = useState('');
+  const [transactionGroups, setTransactionGroups] = useState<TransactionGroup[]>([]);
+  const [duplicatesFound, setDuplicatesFound] = useState(0);
+
+  // Filter jobs that are either running, selling, or tracked
+  const eligibleJobs = jobs.filter(job =>
+    job.status === IndJobStatusOptions.Running ||
+    job.status === IndJobStatusOptions.Selling ||
+    job.status === IndJobStatusOptions.Tracked
+  );
+
+  const findMatchingJob = (itemName: string): string | undefined => {
+    // First try exact match
+    const exactMatch = eligibleJobs.find(job => job.outputItem === itemName);
+    if (exactMatch) return exactMatch.id;
+
+    // Then try case-insensitive match
+    const caseInsensitiveMatch = eligibleJobs.find(job =>
+      job.outputItem.toLowerCase() === itemName.toLowerCase()
+    );
+    if (caseInsensitiveMatch) return caseInsensitiveMatch.id;
+
+    return undefined;
+  };
+
+  const normalizeDate = (dateStr: string): string => {
+    // Convert any ISO date string to consistent format with space
+    return dateStr.replace('T', ' ');
+  };
+
+  const createTransactionKey = (parsed: ReturnType<typeof parseTransactionLine>): string => {
+    if (!parsed) return '';
+    const key = [
+      normalizeDate(parsed.date.toISOString()),
+      parsed.itemName,
+      parsed.quantity.toString(),
+      parsed.totalAmount.toString(),
+      parsed.buyer,
+      parsed.location
+    ].join('|');
+    console.log('Created key from parsed transaction:', {
+      key,
+      date: normalizeDate(parsed.date.toISOString()),
+      itemName: parsed.itemName,
+      quantity: parsed.quantity,
+      totalAmount: parsed.totalAmount,
+      buyer: parsed.buyer,
+      location: parsed.location
+    });
+    return key;
+  };
+
+  const createTransactionKeyFromRecord = (tx: IndTransactionRecordNoId): string => {
+    const key = [
+      normalizeDate(tx.date),
+      tx.itemName,
+      tx.quantity.toString(),
+      tx.totalPrice.toString(),
+      tx.buyer,
+      tx.location
+    ].join('|');
+    console.log('Created key from existing transaction:', {
+      key,
+      date: normalizeDate(tx.date),
+      itemName: tx.itemName,
+      quantity: tx.quantity,
+      totalPrice: tx.totalPrice,
+      buyer: tx.buyer,
+      location: tx.location
+    });
+    return key;
+  };
+
+  const handlePaste = (value: string) => {
+    setPastedData(value);
+    const lines = value.trim().split('\n');
+    const transactions: ParsedTransaction[] = [];
+    const seenTransactions = new Set<string>();
+
+    // Pre-populate seenTransactions with existing transactions from jobs
+    console.log('Starting to check existing transactions from jobs...');
+    eligibleJobs.forEach(job => {
+      console.log(`Checking job ${job.id} (${job.outputItem}) with ${job.income.length} income transactions`);
+      job.income.forEach(tx => {
+        const key = createTransactionKeyFromRecord(tx);
+        seenTransactions.add(key);
+        console.log('Added existing transaction key to Set:', key);
+      });
+    });
+    console.log('Finished adding existing transactions. Set size:', seenTransactions.size);
+    console.log('Current Set contents:', Array.from(seenTransactions));
+
+    let duplicates = 0;
+    lines.forEach((line, index) => {
+      console.log(`\nProcessing line ${index + 1}:`, line);
+      const parsed = parseTransactionLine(line);
+      if (parsed) {
+        const transactionKey = createTransactionKey(parsed);
+        const isDuplicate = seenTransactions.has(transactionKey);
+        console.log('Transaction check:', {
+          key: transactionKey,
+          isDuplicate,
+          setSize: seenTransactions.size,
+          setContains: Array.from(seenTransactions).includes(transactionKey)
+        });
+
+        if (isDuplicate) {
+          console.log('DUPLICATE FOUND:', transactionKey);
+          duplicates++;
+        }
+
+        if (!isDuplicate) {
+          console.log('New transaction - Adding to Set:', transactionKey);
+          seenTransactions.add(transactionKey);
+        }
+
+        const matchingJobId = !isDuplicate ? findMatchingJob(parsed.itemName) : undefined;
+
+        transactions.push({
+          date: parsed.date.toISOString(),
+          quantity: parsed.quantity,
+          itemName: parsed.itemName,
+          unitPrice: parsed.unitPrice,
+          totalPrice: Math.abs(parsed.totalAmount),
+          buyer: parsed.buyer,
+          location: parsed.location,
+          corporation: parsed.corporation,
+          wallet: parsed.wallet,
+          assignedJobId: matchingJobId,
+          isDuplicate
+        });
+      } else {
+        console.log('Failed to parse line:', line);
+      }
+    });
+
+    console.log('Final results:', {
+      processedLines: lines.length,
+      validTransactions: transactions.length,
+      duplicatesFound: duplicates,
+      finalSetSize: seenTransactions.size
+    });
+
+    setDuplicatesFound(duplicates);
+
+    // Group transactions by item name
+    const groups = transactions.reduce((acc, tx) => {
+      const existing = acc.find(g => g.itemName === tx.itemName);
+      if (existing) {
+        existing.transactions.push(tx);
+        existing.totalQuantity += tx.quantity;
+        existing.totalValue += tx.totalPrice;
+      } else {
+        acc.push({
+          itemName: tx.itemName,
+          transactions: [tx],
+          totalQuantity: tx.quantity,
+          totalValue: tx.totalPrice
+        });
+      }
+      return acc;
+    }, [] as TransactionGroup[]);
+
+    setTransactionGroups(groups);
+  };
+
+  const handleAssignJob = (groupIndex: number, jobId: string) => {
+    setTransactionGroups(prev => {
+      const newGroups = [...prev];
+      newGroups[groupIndex].transactions.forEach(tx => {
+        tx.assignedJobId = jobId;
+      });
+      return newGroups;
+    });
+  };
+
+  const handleSubmit = () => {
+    // Group transactions by assigned job
+    const assignments = transactionGroups
+      .flatMap(group => group.transactions)
+      .filter(tx => tx.assignedJobId)
+      .reduce((acc, tx) => {
+        const jobId = tx.assignedJobId!;
+        const existing = acc.find(a => a.jobId === jobId);
+        if (existing) {
+          existing.transactions.push(tx);
+        } else {
+          acc.push({ jobId, transactions: [tx] });
+        }
+        return acc;
+      }, [] as { jobId: string, transactions: IndTransactionRecordNoId[] }[]);
+
+    onTransactionsAssigned(assignments);
+    onClose();
+  };
+
+  const allAssigned = transactionGroups.every(group =>
+    group.transactions.every(tx => tx.assignedJobId)
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <Card className="bg-gray-900 border-gray-700 text-white w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <CardHeader className="flex flex-row items-center justify-between sticky top-0 bg-gray-900 border-b border-gray-700 z-10">
+          <CardTitle className="text-blue-400">Batch Transaction Assignment</CardTitle>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="text-gray-400 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-300">
+              Paste EVE transaction data:
+            </label>
+            <Textarea
+              value={pastedData}
+              onChange={(e) => handlePaste(e.target.value)}
+              placeholder="Paste your EVE transaction data here..."
+              className="min-h-32 bg-gray-800 border-gray-600 text-white"
+            />
+          </div>
+
+          {transactionGroups.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <Badge variant="outline" className="text-blue-400 border-blue-400">
+                    {transactionGroups.length} item types found
+                  </Badge>
+                  {duplicatesFound > 0 && (
+                    <Badge variant="outline" className="text-yellow-400 border-yellow-400">
+                      {duplicatesFound} duplicates found
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-gray-700">
+                    <TableHead className="text-gray-300">Item</TableHead>
+                    <TableHead className="text-gray-300">Quantity</TableHead>
+                    <TableHead className="text-gray-300">Total Value</TableHead>
+                    <TableHead className="text-gray-300">Assign To Job</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transactionGroups.map((group, index) => {
+                    const autoAssigned = group.transactions[0]?.assignedJobId;
+                    const isDuplicate = group.transactions[0]?.isDuplicate;
+                    const matchingJob = autoAssigned ? jobs.find(j => j.id === autoAssigned) : undefined;
+
+                    return (
+                      <TableRow
+                        key={group.itemName}
+                        className={`border-gray-700 ${isDuplicate ? 'bg-red-900/30' : ''}`}
+                      >
+                        <TableCell className="text-white flex items-center gap-2">
+                          {group.itemName}
+                          {isDuplicate && (
+                            <Badge variant="destructive" className="bg-red-600">
+                              Duplicate
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-gray-300">
+                          {group.totalQuantity.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-green-400">
+                          {formatISK(group.totalValue)}
+                        </TableCell>
+                        <TableCell>
+                          {isDuplicate ? (
+                            <div className="text-red-400 text-sm">
+                              Transaction already exists
+                            </div>
+                          ) : (
+                            <Select
+                              value={group.transactions[0]?.assignedJobId || ''}
+                              onValueChange={(value) => handleAssignJob(index, value)}
+                            >
+                              <SelectTrigger
+                                className={`bg-gray-800 border-gray-600 text-white ${autoAssigned ? 'border-green-600' : ''}`}
+                              >
+                                <SelectValue placeholder={autoAssigned ? `Auto-assigned to ${matchingJob?.outputItem}` : 'Select a job'} />
+                              </SelectTrigger>
+                              <SelectContent className="bg-gray-800 border-gray-600">
+                                {eligibleJobs
+                                  .filter(job => job.outputItem.includes(group.itemName) || job.status === 'Tracked')
+                                  .map(job => (
+                                    <SelectItem
+                                      key={job.id}
+                                      value={job.id}
+                                      className="text-white"
+                                    >
+                                      {job.outputItem} ({job.status})
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={onClose}
+                  className="border-gray-600 hover:bg-gray-800"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={!transactionGroups.some(g => g.transactions.some(tx => !tx.isDuplicate && tx.assignedJobId))}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  Assign Transactions
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+export default BatchTransactionForm; 
