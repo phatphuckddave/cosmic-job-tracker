@@ -10,10 +10,10 @@ export function useJobs() {
   useEffect(() => {
     let mounted = true;
     
-    const loadJobs = async () => {
+    const loadJobs = async (visibleStatuses?: string[]) => {
       try {
         setLoading(true);
-        const loadedJobs = await dataService.loadJobs();
+        const loadedJobs = await dataService.loadJobs(visibleStatuses);
         if (mounted) {
           setJobs(loadedJobs);
           setError(null);
@@ -61,6 +61,19 @@ export function useJobs() {
   const createBillItem = useCallback(dataService.createBillItem.bind(dataService), []);
   const createMultipleBillItems = useCallback(dataService.createMultipleBillItems.bind(dataService), []);
 
+  const loadJobsForStatuses = useCallback(async (visibleStatuses: string[]) => {
+    try {
+      setLoading(true);
+      const loadedJobs = await dataService.loadJobs(visibleStatuses);
+      setJobs(loadedJobs);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load jobs');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     jobs,
     loading,
@@ -73,7 +86,8 @@ export function useJobs() {
     updateTransaction,
     deleteTransaction,
     createBillItem,
-    createMultipleBillItems
+    createMultipleBillItems,
+    loadJobsForStatuses
   };
 }
 

@@ -20,7 +20,8 @@ const Index = () => {
     updateJob,
     deleteJob,
     createMultipleTransactions,
-    createMultipleBillItems
+    createMultipleBillItems,
+    loadJobsForStatuses
   } = useJobs();
 
   const [showJobForm, setShowJobForm] = useState(false);
@@ -188,6 +189,12 @@ const Index = () => {
     const newState = { ...collapsedGroups, [status]: !collapsedGroups[status] };
     setCollapsedGroups(newState);
     localStorage.setItem('jobGroupsCollapsed', JSON.stringify(newState));
+    
+    // Load jobs for newly opened groups
+    if (collapsedGroups[status]) {
+      // Group is becoming visible, load jobs for this status
+      loadJobsForStatuses([status]);
+    }
   };
 
   const handleBatchTransactionsAssigned = async (assignments: { jobId: string, transactions: IndTransactionRecordNoId[] }[]) => {

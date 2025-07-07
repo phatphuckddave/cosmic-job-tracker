@@ -44,7 +44,7 @@ export class DataService {
     return this.jobs.find(job => job.id === id) || null;
   }
 
-  async loadJobs(): Promise<IndJob[]> {
+  async loadJobs(visibleStatuses?: string[]): Promise<IndJob[]> {
     // Wait for initialization first
     await this.initialized;
 
@@ -53,15 +53,21 @@ export class DataService {
       return this.loadPromise;
     }
 
-    // If we already have jobs loaded, return them immediately
-    if (this.jobs.length > 0) {
+    // If we already have jobs loaded and no specific statuses requested, return them immediately
+    if (this.jobs.length > 0 && !visibleStatuses) {
       return Promise.resolve(this.getJobs());
     }
 
     // Start a new load
-    console.log('Loading jobs from database');
-    this.loadPromise = jobService.getJobs().then(jobs => {
-      this.jobs = jobs;
+    console.log('Loading jobs from database', visibleStatuses ? `for statuses: ${visibleStatuses.join(', ')}` : '');
+    this.loadPromise = jobService.getJobs(visibleStatuses).then(jobs => {
+      if (visibleStatuses) {
+        // If filtering by statuses, merge with existing jobs
+        const existingJobs = this.jobs.filter(job => !visibleStatuses.includes(job.status));
+        this.jobs = [...existingJobs, ...jobs];
+      } else {
+        this.jobs = jobs;
+      }
       this.notifyListeners();
       return this.getJobs();
     }).finally(() => {

@@ -72,14 +72,14 @@ const JobCardDetails: React.FC<JobCardDetailsProps> = ({ job }) => {
           onChange={(e) => setTempValues({ ...tempValues, [fieldName]: e.target.value })}
           onBlur={() => handleFieldUpdate(fieldName, tempValues[fieldName])}
           onKeyDown={(e) => handleKeyPress(fieldName, e)}
-          className="h-6 px-2 py-1 bg-gray-800 border-gray-600 text-white text-xs"
+          className="h-6 px-2 py-1 bg-gray-800 border-gray-600 text-white text-xs flex-1 min-w-0"
           autoFocus
           data-no-navigate
         />
       ) : (
         <span
           onClick={(e) => handleFieldClick(fieldName, value, e)}
-          className="cursor-pointer hover:text-blue-400 flex-1"
+          className="cursor-pointer hover:text-blue-400 flex-1 min-w-0 h-6 flex items-center"
           title="Click to edit"
           data-no-navigate
         >

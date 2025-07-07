@@ -248,7 +248,7 @@ const JobCardHeader: React.FC<JobCardHeaderProps> = ({
                   onChange={(e) => setProducedValue(e.target.value)}
                   onBlur={handleProducedUpdate}
                   onKeyDown={handleProducedKeyPress}
-                  className="w-24 h-6 px-2 py-1 inline-block bg-gray-800 border-gray-600 text-white"
+                  className="w-24 h-5 px-2 py-0 inline-block bg-gray-800 border-gray-600 text-white text-xs leading-5"
                   min="0"
                   autoFocus
                   data-no-navigate
@@ -256,7 +256,7 @@ const JobCardHeader: React.FC<JobCardHeaderProps> = ({
               ) : (
                 <span
                   onClick={handleProducedClick}
-                  className={job.status !== 'Closed' ? "cursor-pointer hover:text-blue-400" : undefined}
+                  className={`inline-block min-w-[96px] h-5 leading-5 ${job.status !== 'Closed' ? "cursor-pointer hover:text-blue-400" : ""}`}
                   title={job.status !== 'Closed' ? "Click to edit" : undefined}
                   data-no-navigate
                 >
