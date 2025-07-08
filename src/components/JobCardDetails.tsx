@@ -69,42 +69,70 @@ const JobCardDetails: React.FC<JobCardDetailsProps> = ({ job }) => {
     }
   };
 
+  const formatDateForInput = (dateString: string | null | undefined) => {
+    if (!dateString) return '';
+    return new Date(dateString).toISOString().slice(0, 16);
+  };
+
+  const handleBlur = (fieldName: string) => {
+    const value = tempValues[fieldName];
+    if (value !== (job[fieldName as keyof IndJob] || '')) {
+      handleFieldUpdate(fieldName, value);
+    } else {
+      setEditingField(null);
+    }
+  };
+
+  const handleClick = (fieldName: string, value: string | null, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (value) {
+      setEditingField(fieldName);
+      setTempValues({ ...tempValues, [fieldName]: formatDateForInput(value) });
+    }
+  };
+
   const DateField = ({ label, value, fieldName, icon }: { label: string; value: string | null; fieldName: string; icon: React.ReactNode }) => (
-    <div className="flex items-center gap-2 text-sm text-gray-400">
-      {icon}
-      <span className="w-16">{label}:</span>
-      {editingField === fieldName ? (
-        <Input
-          type="datetime-local"
-          value={tempValues[fieldName] || ''}
-          onChange={(e) => setTempValues({ ...tempValues, [fieldName]: e.target.value })}
-          onBlur={() => handleFieldUpdate(fieldName, tempValues[fieldName])}
-          onKeyDown={(e) => handleKeyPress(fieldName, e)}
-          className="h-6 px-2 py-1 bg-gray-800 border-gray-600 text-white text-xs flex-1 min-w-0"
-          autoFocus
-          data-no-navigate
-        />
-      ) : (
-        <span
-          onClick={(e) => handleFieldClick(fieldName, value, e)}
-          className="cursor-pointer hover:text-blue-400 flex-1 min-w-0 h-6 flex items-center"
-          title="Click to edit"
-          data-no-navigate
-        >
-          {formatDateTime(value)}
-        </span>
-      )}
-    </div>
+    <>
+      <div className="flex items-center gap-2 text-sm text-gray-400">
+        {icon}
+        <span>{label}:</span>
+      </div>
+      <div className="flex items-center">
+        {editingField === fieldName ? (
+          <Input
+            type="datetime-local"
+            value={tempValues[fieldName] || ''}
+            onChange={(e) => setTempValues({ ...tempValues, [fieldName]: e.target.value })}
+            onBlur={() => handleBlur(fieldName)}
+            onKeyDown={(e) => handleKeyPress(fieldName, e)}
+            className="h-6 px-2 py-1 bg-gray-800 border-gray-600 text-white text-sm w-full"
+            autoFocus
+            data-no-navigate
+          />
+        ) : (
+          <span
+            onClick={(e) => handleClick(fieldName, value, e)}
+            className="cursor-pointer hover:text-blue-400 h-6 flex items-center text-white text-sm w-full"
+            title="Click to edit"
+            data-no-navigate
+          >
+            {formatDateTime(value)}
+          </span>
+        )}
+      </div>
+    </>
   );
 
   return (
     <div className="flex-shrink-0">
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+      <div className="grid grid-cols-4 gap-x-4 gap-y-2">
         <div className="flex items-center gap-2 text-sm text-gray-400">
           <Factory className="w-4 h-4" />
-          <span className="w-16">Job ID:</span>
+          <span>Job ID:</span>
+        </div>
+        <div className="flex items-center gap-1">
           <span
-            className="cursor-pointer hover:text-blue-400 transition-colors inline-flex items-center gap-1"
+            className="cursor-pointer hover:text-blue-400 transition-colors inline-flex items-center gap-1 text-sm text-white"
             onClick={handleJobIdClick}
             title="Click to copy job ID"
             data-no-navigate
@@ -116,8 +144,10 @@ const JobCardDetails: React.FC<JobCardDetailsProps> = ({ job }) => {
 
         <div className="flex items-center gap-2 text-sm text-gray-400">
           <Calendar className="w-4 h-4" />
-          <span className="w-16">Created:</span>
-          <span>{formatDateTime(job.created)}</span>
+          <span>Created:</span>
+        </div>
+        <div className="text-sm text-white">
+          {formatDateTime(job.created)}
         </div>
 
         <DateField
@@ -205,12 +235,14 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({ job }) => {
   };
 
   return (
-    <div className="grid grid-cols-2 gap-4 text-sm text-gray-400">
+    <div className="grid grid-cols-4 gap-x-4 gap-y-2 text-sm text-gray-400">
       <div className="flex items-center gap-2">
         <Factory className="w-4 h-4" />
-        <span className="w-20">Target Price:</span>
+        <span>Target Price:</span>
+      </div>
+      <div className="flex items-center gap-1">
         <span
-          className="cursor-pointer hover:text-blue-400 transition-colors inline-flex items-center gap-1"
+          className="cursor-pointer hover:text-blue-400 transition-colors inline-flex items-center gap-1 text-white"
           onClick={handleCopyTargetPrice}
           title="Click to copy target price per unit (based on projected revenue)"
           data-no-navigate
@@ -218,13 +250,20 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({ job }) => {
           {formatISK(targetPriceWithTax)}
           {copying === 'targetPrice' && <Copy className="w-3 h-3 text-green-400" />}
         </span>
+        {salesTax > 0 && (
+          <span className="text-xs text-gray-500 ml-1">
+            (+{(salesTax * 100).toFixed(1)}%)
+          </span>
+        )}
       </div>
       
       <div className="flex items-center gap-2">
         <DollarSign className="w-4 h-4" />
-        <span className="w-20">Break-even:</span>
+        <span>Break-even:</span>
+      </div>
+      <div className="flex items-center gap-1">
         <span
-          className="cursor-pointer hover:text-yellow-400 transition-colors inline-flex items-center gap-1"
+          className="cursor-pointer hover:text-yellow-400 transition-colors inline-flex items-center gap-1 text-white"
           onClick={handleCopyBreakEvenPrice}
           title="Click to copy break-even price per unit (based on actual costs)"
           data-no-navigate
@@ -232,10 +271,11 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({ job }) => {
           {formatISK(breakEvenPriceWithTax)}
           {copying === 'breakEvenPrice' && <Copy className="w-3 h-3 text-green-400" />}
         </span>
-      </div>
-      
-      <div className="col-span-2 text-xs text-gray-500">
-        per unit {salesTax > 0 && `(+${(salesTax * 100).toFixed(1)}% tax)`}
+        {salesTax > 0 && (
+          <span className="text-xs text-gray-500 ml-1">
+            (+{(salesTax * 100).toFixed(1)}%)
+          </span>
+        )}
       </div>
     </div>
   );
