@@ -30,6 +30,13 @@ const JobCardDetails: React.FC<JobCardDetailsProps> = ({ job }) => {
     }).replace(',', '');
   };
 
+  const roundToSignificantDigits = (num: number, digits: number = 4): number => {
+    if (num === 0) return 0;
+    const magnitude = Math.floor(Math.log10(Math.abs(num)));
+    const factor = Math.pow(10, digits - 1 - magnitude);
+    return Math.round(num * factor) / factor;
+  };
+
   const handleFieldClick = (fieldName: string, currentValue: string | null, e: React.MouseEvent) => {
     setEditingField(fieldName);
     setTempValues({ ...tempValues, [fieldName]: currentValue || '' });
@@ -204,22 +211,29 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({ job }) => {
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
+
+  const roundToSignificantDigits = (num: number, digits: number = 4): number => {
+    if (num === 0) return 0;
+    const magnitude = Math.floor(Math.log10(Math.abs(num)));
+    const factor = Math.pow(10, digits - 1 - magnitude);
+    return Math.round(num * factor) / factor;
+  };
   
   // Calculate total costs
   const totalCosts = job.expenditures?.reduce((sum, tx) => sum + tx.totalPrice, 0) || 0;
   
   // Target price (based on projected revenue)
   const targetPricePerUnit = job.projectedRevenue / job.produced;
-  const targetPriceWithTax = targetPricePerUnit * (1 + salesTax);
+  const targetPriceWithTax = roundToSignificantDigits(targetPricePerUnit * (1 + salesTax));
   
   // Break-even price (based on actual costs)
   const breakEvenPricePerUnit = totalCosts / job.produced;
-  const breakEvenPriceWithTax = breakEvenPricePerUnit * (1 + salesTax);
+  const breakEvenPriceWithTax = roundToSignificantDigits(breakEvenPricePerUnit * (1 + salesTax));
   
   const handleCopyTargetPrice = async (e: React.MouseEvent) => {
     e.stopPropagation();
     await copyToClipboard(
-      targetPriceWithTax.toFixed(2), 
+      targetPriceWithTax.toString(), 
       'targetPrice', 
       'Target price copied to clipboard'
     );
@@ -228,19 +242,21 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({ job }) => {
   const handleCopyBreakEvenPrice = async (e: React.MouseEvent) => {
     e.stopPropagation();
     await copyToClipboard(
-      breakEvenPriceWithTax.toFixed(2), 
+      breakEvenPriceWithTax.toString(), 
       'breakEvenPrice', 
       'Break-even price copied to clipboard'
     );
   };
 
+  const taxSuffix = salesTax > 0 ? ` (+${(salesTax * 100).toFixed(1)}% tax)` : '';
+
   return (
-    <div className="grid gap-x-4 gap-y-2 text-sm text-gray-400" style={{ gridTemplateColumns: 'auto 1fr auto 1fr' }}>
-      <div className="flex items-center gap-2">
+    <div className="grid gap-x-4 gap-y-2 text-sm" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
+      <div className="col-span-2 flex items-center gap-2 text-gray-400">
         <Factory className="w-4 h-4" />
-        <span>Target Price:</span>
+        <span>Target Price{taxSuffix}:</span>
       </div>
-      <div className="flex items-center gap-1">
+      <div className="col-span-2 flex items-center gap-1">
         <span
           className="cursor-pointer hover:text-blue-400 transition-colors inline-flex items-center gap-1 text-white"
           onClick={handleCopyTargetPrice}
@@ -250,18 +266,13 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({ job }) => {
           {formatISK(targetPriceWithTax)}
           {copying === 'targetPrice' && <Copy className="w-3 h-3 text-green-400" />}
         </span>
-        {salesTax > 0 && (
-          <span className="text-xs text-gray-500 ml-1">
-            (+{(salesTax * 100).toFixed(1)}%)
-          </span>
-        )}
       </div>
       
-      <div className="flex items-center gap-2">
+      <div className="col-span-2 flex items-center gap-2 text-gray-400">
         <DollarSign className="w-4 h-4" />
-        <span>Break-even:</span>
+        <span>Break-even{taxSuffix}:</span>
       </div>
-      <div className="flex items-center gap-1">
+      <div className="col-span-2 flex items-center gap-1">
         <span
           className="cursor-pointer hover:text-yellow-400 transition-colors inline-flex items-center gap-1 text-white"
           onClick={handleCopyBreakEvenPrice}
@@ -271,11 +282,6 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({ job }) => {
           {formatISK(breakEvenPriceWithTax)}
           {copying === 'breakEvenPrice' && <Copy className="w-3 h-3 text-green-400" />}
         </span>
-        {salesTax > 0 && (
-          <span className="text-xs text-gray-500 ml-1">
-            (+{(salesTax * 100).toFixed(1)}%)
-          </span>
-        )}
       </div>
     </div>
   );
