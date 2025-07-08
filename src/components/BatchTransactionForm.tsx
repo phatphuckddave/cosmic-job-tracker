@@ -208,8 +208,14 @@ const BatchTransactionForm: React.FC<BatchTransactionFormProps> = ({ onClose, on
   );
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <Card className="bg-gray-900 border-gray-700 text-white w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+    <div 
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+      onClick={onClose}
+    >
+      <Card 
+        className="bg-gray-900 border-gray-700 text-white w-full max-w-4xl max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         <CardHeader className="flex flex-row items-center justify-between sticky top-0 bg-gray-900 border-b border-gray-700 z-10">
           <CardTitle className="text-blue-400">Batch Transaction Assignment</CardTitle>
           <Button

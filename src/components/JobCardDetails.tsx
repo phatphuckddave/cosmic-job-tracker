@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Factory, Clock, Copy } from 'lucide-react';
+import { Calendar, Factory, Clock, Copy, DollarSign } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { IndJob } from '@/lib/types';
 import { useJobs } from '@/hooks/useDataService';
@@ -151,18 +151,18 @@ const JobCardDetails: React.FC<JobCardDetailsProps> = ({ job }) => {
 
       {job.projectedRevenue > 0 && job.produced > 0 && (
         <div className="mt-2">
-          <MinPriceDisplay job={job} />
+          <PriceDisplay job={job} />
         </div>
       )}
     </div>
   );
 };
 
-interface MinPriceDisplayProps {
+interface PriceDisplayProps {
   job: IndJob;
 }
 
-const MinPriceDisplay: React.FC<MinPriceDisplayProps> = ({ job }) => {
+const PriceDisplay: React.FC<PriceDisplayProps> = ({ job }) => {
   const { copying, copyToClipboard } = useClipboard();
   const [salesTax, setSalesTax] = useState(() => parseFloat(localStorage.getItem('salesTax') || '0') / 100);
   
@@ -175,34 +175,68 @@ const MinPriceDisplay: React.FC<MinPriceDisplayProps> = ({ job }) => {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
   
-  const minPricePerUnit = job.projectedRevenue / job.produced;
-  const minPriceWithTax = minPricePerUnit * (1 + salesTax);
+  // Calculate total costs
+  const totalCosts = job.expenditures?.reduce((sum, tx) => sum + tx.totalPrice, 0) || 0;
   
-  const handleCopyPrice = async (e: React.MouseEvent) => {
+  // Target price (based on projected revenue)
+  const targetPricePerUnit = job.projectedRevenue / job.produced;
+  const targetPriceWithTax = targetPricePerUnit * (1 + salesTax);
+  
+  // Break-even price (based on actual costs)
+  const breakEvenPricePerUnit = totalCosts / job.produced;
+  const breakEvenPriceWithTax = breakEvenPricePerUnit * (1 + salesTax);
+  
+  const handleCopyTargetPrice = async (e: React.MouseEvent) => {
     e.stopPropagation();
     await copyToClipboard(
-      minPriceWithTax.toFixed(2), 
-      'minPrice', 
-      'Minimum price copied to clipboard'
+      targetPriceWithTax.toFixed(2), 
+      'targetPrice', 
+      'Target price copied to clipboard'
+    );
+  };
+
+  const handleCopyBreakEvenPrice = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await copyToClipboard(
+      breakEvenPriceWithTax.toFixed(2), 
+      'breakEvenPrice', 
+      'Break-even price copied to clipboard'
     );
   };
 
   return (
-    <div className="flex items-center gap-2 text-sm text-gray-400">
-      <Factory className="w-4 h-4" />
-      <span className="w-16">Min Price:</span>
-      <span
-        className="cursor-pointer hover:text-blue-400 transition-colors inline-flex items-center gap-1"
-        onClick={handleCopyPrice}
-        title="Click to copy minimum price per unit"
-        data-no-navigate
-      >
-        {formatISK(minPriceWithTax)}
-        {copying === 'minPrice' && <Copy className="w-3 h-3 text-green-400" />}
-      </span>
-      <span className="text-xs text-gray-500">
+    <div className="grid grid-cols-2 gap-4 text-sm text-gray-400">
+      <div className="flex items-center gap-2">
+        <Factory className="w-4 h-4" />
+        <span className="w-20">Target Price:</span>
+        <span
+          className="cursor-pointer hover:text-blue-400 transition-colors inline-flex items-center gap-1"
+          onClick={handleCopyTargetPrice}
+          title="Click to copy target price per unit (based on projected revenue)"
+          data-no-navigate
+        >
+          {formatISK(targetPriceWithTax)}
+          {copying === 'targetPrice' && <Copy className="w-3 h-3 text-green-400" />}
+        </span>
+      </div>
+      
+      <div className="flex items-center gap-2">
+        <DollarSign className="w-4 h-4" />
+        <span className="w-20">Break-even:</span>
+        <span
+          className="cursor-pointer hover:text-yellow-400 transition-colors inline-flex items-center gap-1"
+          onClick={handleCopyBreakEvenPrice}
+          title="Click to copy break-even price per unit (based on actual costs)"
+          data-no-navigate
+        >
+          {formatISK(breakEvenPriceWithTax)}
+          {copying === 'breakEvenPrice' && <Copy className="w-3 h-3 text-green-400" />}
+        </span>
+      </div>
+      
+      <div className="col-span-2 text-xs text-gray-500">
         per unit {salesTax > 0 && `(+${(salesTax * 100).toFixed(1)}% tax)`}
-      </span>
+      </div>
     </div>
   );
 };
