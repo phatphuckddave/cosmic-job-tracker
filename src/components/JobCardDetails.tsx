@@ -125,7 +125,7 @@ const JobCardDetails: React.FC<JobCardDetailsProps> = ({ job }) => {
 
   return (
     <div className="flex-shrink-0">
-      <div className="grid grid-cols-4 gap-x-4 gap-y-2">
+      <div className="grid gap-x-4 gap-y-2" style={{ gridTemplateColumns: 'auto 1fr auto 1fr' }}>
         <div className="flex items-center gap-2 text-sm text-gray-400">
           <Factory className="w-4 h-4" />
           <span>Job ID:</span>
@@ -235,7 +235,7 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({ job }) => {
   };
 
   return (
-    <div className="grid grid-cols-4 gap-x-4 gap-y-2 text-sm text-gray-400">
+    <div className="grid gap-x-4 gap-y-2 text-sm text-gray-400" style={{ gridTemplateColumns: 'auto 1fr auto 1fr' }}>
       <div className="flex items-center gap-2">
         <Factory className="w-4 h-4" />
         <span>Target Price:</span>
