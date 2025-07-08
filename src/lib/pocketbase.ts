@@ -41,7 +41,7 @@ const wrappedPb = new Proxy(pb, {
 			return (collectionName: string) => {
 				// Get the original collection
 				const originalCollection = target.collection(collectionName);
-				
+
 				// Return a proxy for the collection that ensures auth
 				return new Proxy(originalCollection, {
 					get(collectionTarget, methodName) {
@@ -61,7 +61,7 @@ const wrappedPb = new Proxy(pb, {
 				});
 			};
 		}
-		
+
 		return target[prop as keyof typeof target];
 	}
 });

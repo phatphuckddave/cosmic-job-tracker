@@ -16,14 +16,14 @@ const expand = 'billOfMaterials,consumedMaterials,expenditures,income';
 
 export async function getJobs(statuses?: string[]): Promise<IndJob[]> {
   console.log('Getting jobs', statuses ? `for statuses: ${statuses.join(', ')}` : '');
-  
+
   let options: any = { expand };
-  
+
   if (statuses && statuses.length > 0) {
     const statusFilters = statuses.map(status => `status = "${status}"`).join(' || ');
     options.filter = statusFilters;
   }
-  
+
   const result = await pb.collection('ind_job').getFullList(10000, options);
   const jobs: IndJob[] = [];
   for (const job of result) {

@@ -1,15 +1,21 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Factory, TrendingUp, Briefcase, FileText } from 'lucide-react';
-import { IndTransactionRecordNoId, IndJobRecordNoId, IndJobStatusOptions } from '@/lib/pbtypes';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Plus, Factory, TrendingUp, Briefcase, FileText, Settings } from 'lucide-react';
+import { IndTransactionRecordNoId, IndJobRecordNoId } from '@/lib/pbtypes';
 import { formatISK } from '@/utils/priceUtils';
-import JobCard from '@/components/JobCard';
+import { getStatusPriority } from '@/utils/jobStatusUtils';
 import JobForm from '@/components/JobForm';
+import JobGroup from '@/components/JobGroup';
 import { IndJob } from '@/lib/types';
 import BatchTransactionForm from '@/components/BatchTransactionForm';
 import { useJobs } from '@/hooks/useDataService';
+import { useJobMetrics } from '@/hooks/useJobMetrics';
 import SearchOverlay from '@/components/SearchOverlay';
+import RecapPopover from '@/components/RecapPopover';
 
 const Index = () => {
   const {
@@ -62,36 +68,10 @@ const Index = () => {
     );
   }
 
-  const getStatusPriority = (status: IndJobStatusOptions): number => {
-    switch (status) {
-      case 'Planned': return 6;
-      case 'Acquisition': return 1;
-      case 'Running': return 2;
-      case 'Done': return 3;
-      case 'Selling': return 4;
-      case 'Closed': return 5;
-      case 'Tracked': return 7;
-      default: return 0;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Planned': return 'bg-gray-600';
-      case 'Acquisition': return 'bg-yellow-600';
-      case 'Running': return 'bg-blue-600';
-      case 'Done': return 'bg-purple-600';
-      case 'Selling': return 'bg-orange-600';
-      case 'Closed': return 'bg-green-600';
-      case 'Tracked': return 'bg-cyan-600';
-      default: return 'bg-gray-600';
-    }
-  };
-
   const filterJobs = (jobs: IndJob[]) => {
     if (!searchQuery) return jobs;
     const query = searchQuery.toLowerCase();
-    return jobs.filter(job => 
+    return jobs.filter(job =>
       job.outputItem.toLowerCase().includes(query)
     );
   };
@@ -108,16 +88,7 @@ const Index = () => {
   const regularJobs = filterJobs(sortedJobs.filter(job => job.status !== 'Tracked'));
   const trackedJobs = filterJobs(sortedJobs.filter(job => job.status === 'Tracked'));
 
-  const totalJobs = regularJobs.length;
-  const totalProfit = regularJobs.reduce((sum, job) => {
-    const expenditure = job.expenditures.reduce((sum, tx) => sum + tx.totalPrice, 0);
-    const income = job.income.reduce((sum, tx) => sum + tx.totalPrice, 0);
-    return sum + (income - expenditure);
-  }, 0);
-
-  const totalRevenue = regularJobs.reduce((sum, job) =>
-    sum + job.income.reduce((sum, tx) => sum + tx.totalPrice, 0), 0
-  );
+  const { totalJobs, totalProfit, totalRevenue, calculateJobRevenue, calculateJobProfit } = useJobMetrics(regularJobs);
 
   const handleCreateJob = async (jobData: IndJobRecordNoId) => {
     try {
@@ -189,10 +160,8 @@ const Index = () => {
     const newState = { ...collapsedGroups, [status]: !collapsedGroups[status] };
     setCollapsedGroups(newState);
     localStorage.setItem('jobGroupsCollapsed', JSON.stringify(newState));
-    
-    // Load jobs for newly opened groups
+
     if (collapsedGroups[status]) {
-      // Group is becoming visible, load jobs for this status
       loadJobsForStatuses([status]);
     }
   };
@@ -254,7 +223,15 @@ const Index = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-400">{formatISK(totalRevenue)}</div>
+            <RecapPopover
+              title="Revenue Breakdown"
+              jobs={regularJobs}
+              calculateJobValue={calculateJobRevenue}
+            >
+              <div className="text-2xl font-bold text-green-400 cursor-pointer hover:text-green-300 transition-colors">
+                {formatISK(totalRevenue)}
+              </div>
+            </RecapPopover>
           </CardContent>
         </Card>
         <Card className="bg-gray-900 border-gray-700 text-white">
@@ -265,9 +242,15 @@ const Index = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              {formatISK(totalProfit)}
-            </div>
+            <RecapPopover
+              title="Profit Breakdown"
+              jobs={regularJobs}
+              calculateJobValue={calculateJobProfit}
+            >
+              <div className={`text-2xl font-bold cursor-pointer transition-colors ${totalProfit >= 0 ? 'text-green-400 hover:text-green-300' : 'text-red-400 hover:text-red-300'}`}>
+                {formatISK(totalProfit)}
+              </div>
+            </RecapPopover>
           </CardContent>
         </Card>
       </div>
@@ -276,6 +259,7 @@ const Index = () => {
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-bold text-white">Jobs</h2>
           <div className="flex gap-2">
+            <SalesTaxConfig />
             <Button
               variant="outline"
               onClick={() => setShowBatchForm(true)}
@@ -299,73 +283,34 @@ const Index = () => {
 
         <div className="space-y-6">
           {Object.entries(jobGroups).map(([status, statusJobs]) => (
-            <div key={status} className="space-y-4">
-              <div
-                className={`${getStatusColor(status)} rounded-lg cursor-pointer select-none transition-colors hover:opacity-90`}
-                onClick={() => toggleGroup(status)}
-              >
-                <div className="flex items-center justify-between p-4">
-                  <h3 className="text-xl font-semibold text-white flex items-center gap-3">
-                    <span>{status}</span>
-                    <span className="text-gray-200 text-lg">({statusJobs.length} jobs)</span>
-                  </h3>
-                  <div className={`text-white text-lg transition-transform ${collapsedGroups[status] ? '-rotate-90' : 'rotate-0'}`}>
-                    ⌄
-                  </div>
-                </div>
-              </div>
-
-              {!collapsedGroups[status] && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {statusJobs.map(job => (
-                    <JobCard
-                      key={job.id}
-                      job={job}
-                      onEdit={handleEditJob}
-                      onDelete={handleDeleteJob}
-                      onUpdateProduced={handleUpdateProduced}
-                      onImportBOM={handleImportBOM}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+            <JobGroup
+              key={status}
+              status={status}
+              jobs={statusJobs}
+              isCollapsed={collapsedGroups[status] || false}
+              onToggle={toggleGroup}
+              onEdit={handleEditJob}
+              onDelete={handleDeleteJob}
+              onUpdateProduced={handleUpdateProduced}
+              onImportBOM={handleImportBOM}
+            />
           ))}
         </div>
       </div>
 
       {trackedJobs.length > 0 && (
         <div className="space-y-4 mt-8 pt-8 border-t border-gray-700">
-          <div
-            className="bg-cyan-600 rounded-lg cursor-pointer select-none transition-colors hover:opacity-90"
-            onClick={() => toggleGroup('Tracked')}
-          >
-            <div className="flex items-center justify-between p-4">
-              <h2 className="text-xl font-bold text-white flex items-center gap-3">
-                <span>Tracked Transactions</span>
-                <span className="text-gray-200 text-lg">({trackedJobs.length} jobs)</span>
-              </h2>
-              <div className={`text-white text-lg transition-transform ${collapsedGroups['Tracked'] ? '-rotate-90' : 'rotate-0'}`}>
-                ⌄
-              </div>
-            </div>
-          </div>
-
-          {!collapsedGroups['Tracked'] && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {trackedJobs.map(job => (
-                <JobCard
-                  key={job.id}
-                  job={job}
-                  onEdit={handleEditJob}
-                  onDelete={handleDeleteJob}
-                  onUpdateProduced={handleUpdateProduced}
-                  onImportBOM={handleImportBOM}
-                  isTracked={true}
-                />
-              ))}
-            </div>
-          )}
+          <JobGroup
+            status="Tracked"
+            jobs={trackedJobs}
+            isCollapsed={collapsedGroups['Tracked'] || false}
+            onToggle={toggleGroup}
+            onEdit={handleEditJob}
+            onDelete={handleDeleteJob}
+            onUpdateProduced={handleUpdateProduced}
+            onImportBOM={handleImportBOM}
+            isTracked={true}
+          />
         </div>
       )}
 
@@ -377,6 +322,66 @@ const Index = () => {
         />
       )}
     </div>
+  );
+};
+
+const SalesTaxConfig = () => {
+  const [salesTax, setSalesTax] = useState(() => {
+    return localStorage.getItem('salesTax') || '0';
+  });
+  const [isOpen, setIsOpen] = useState(false);
+
+  const handleSave = () => {
+    localStorage.setItem('salesTax', salesTax);
+    setIsOpen(false);
+    // Trigger a re-render of job cards by dispatching a storage event
+    window.dispatchEvent(new StorageEvent('storage', {
+      key: 'salesTax',
+      newValue: salesTax
+    }));
+  };
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className="border-gray-600 hover:bg-gray-800"
+        >
+          <Settings className="w-4 h-4 mr-2" />
+          Tax Config
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 bg-gray-900 border-gray-700 text-white">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="salesTax" className="text-sm font-medium text-gray-300">
+              Sales Tax (%)
+            </Label>
+            <Input
+              id="salesTax"
+              type="number"
+              value={salesTax}
+              onChange={(e) => setSalesTax(e.target.value)}
+              onBlur={handleSave}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleSave();
+                }
+              }}
+              placeholder="0"
+              min="0"
+              max="100"
+              step="0.1"
+              className="bg-gray-800 border-gray-600 text-white"
+            />
+            <p className="text-xs text-gray-400">
+              Applied to minimum price calculations
+            </p>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 };
 

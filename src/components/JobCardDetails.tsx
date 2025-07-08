@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { Calendar, Factory, Clock } from 'lucide-react';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
+import { useState, useEffect } from 'react';
+import { Calendar, Factory, Clock, Copy } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { IndJob } from '@/lib/types';
 import { useJobs } from '@/hooks/useDataService';
 import { useToast } from '@/hooks/use-toast';
+import { useClipboard } from '@/hooks/useClipboard';
+import { formatISK } from '@/utils/priceUtils';
 
 interface JobCardDetailsProps {
   job: IndJob;
@@ -15,6 +16,8 @@ const JobCardDetails: React.FC<JobCardDetailsProps> = ({ job }) => {
   const [tempValues, setTempValues] = useState<{ [key: string]: string }>({});
   const { updateJob } = useJobs();
   const { toast } = useToast();
+
+  const { copying, copyToClipboard } = useClipboard();
 
   const formatDateTime = (dateString: string | null | undefined) => {
     if (!dateString) return 'Not set';
@@ -30,6 +33,11 @@ const JobCardDetails: React.FC<JobCardDetailsProps> = ({ job }) => {
   const handleFieldClick = (fieldName: string, currentValue: string | null, e: React.MouseEvent) => {
     setEditingField(fieldName);
     setTempValues({ ...tempValues, [fieldName]: currentValue || '' });
+  };
+
+  const handleJobIdClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await copyToClipboard(job.id, 'id', 'Job ID copied to clipboard');
   };
 
   const handleFieldUpdate = async (fieldName: string, value: string) => {
@@ -95,7 +103,15 @@ const JobCardDetails: React.FC<JobCardDetailsProps> = ({ job }) => {
         <div className="flex items-center gap-2 text-sm text-gray-400">
           <Factory className="w-4 h-4" />
           <span className="w-16">Job ID:</span>
-          <span>{job.id}</span>
+          <span
+            className="cursor-pointer hover:text-blue-400 transition-colors inline-flex items-center gap-1"
+            onClick={handleJobIdClick}
+            title="Click to copy job ID"
+            data-no-navigate
+          >
+            {job.id}
+            {copying === 'id' && <Copy className="w-3 h-3 text-green-400" />}
+          </span>
         </div>
 
         <div className="flex items-center gap-2 text-sm text-gray-400">
@@ -133,31 +149,60 @@ const JobCardDetails: React.FC<JobCardDetailsProps> = ({ job }) => {
         />
       </div>
 
-      {job.billOfMaterials && job.billOfMaterials.length > 0 && (
-        <HoverCard>
-          <HoverCardTrigger asChild>
-            <div
-              className="text-sm text-gray-400 mt-2 cursor-pointer hover:text-blue-400"
-              data-no-navigate
-            >
-              BOM: {job.billOfMaterials.length} items (hover to view)
-            </div>
-          </HoverCardTrigger>
-          <HoverCardContent className="w-80 bg-gray-800/50 border-gray-600 text-white">
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold text-blue-400">Bill of Materials</h4>
-              <div className="text-xs space-y-1 max-h-48 overflow-y-auto">
-                {job.billOfMaterials.map((item, index) => (
-                  <div key={index} className="flex justify-between">
-                    <span>{item.name}</span>
-                    <span className="text-gray-300">{item.quantity.toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </HoverCardContent>
-        </HoverCard>
+      {job.projectedRevenue > 0 && job.produced > 0 && (
+        <div className="mt-2">
+          <MinPriceDisplay job={job} />
+        </div>
       )}
+    </div>
+  );
+};
+
+interface MinPriceDisplayProps {
+  job: IndJob;
+}
+
+const MinPriceDisplay: React.FC<MinPriceDisplayProps> = ({ job }) => {
+  const { copying, copyToClipboard } = useClipboard();
+  const [salesTax, setSalesTax] = useState(() => parseFloat(localStorage.getItem('salesTax') || '0') / 100);
+  
+  // Listen for storage changes to update tax rate
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setSalesTax(parseFloat(localStorage.getItem('salesTax') || '0') / 100);
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+  
+  const minPricePerUnit = job.projectedRevenue / job.produced;
+  const minPriceWithTax = minPricePerUnit * (1 + salesTax);
+  
+  const handleCopyPrice = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await copyToClipboard(
+      minPriceWithTax.toFixed(2), 
+      'minPrice', 
+      'Minimum price copied to clipboard'
+    );
+  };
+
+  return (
+    <div className="flex items-center gap-2 text-sm text-gray-400">
+      <Factory className="w-4 h-4" />
+      <span className="w-16">Min Price:</span>
+      <span
+        className="cursor-pointer hover:text-blue-400 transition-colors inline-flex items-center gap-1"
+        onClick={handleCopyPrice}
+        title="Click to copy minimum price per unit"
+        data-no-navigate
+      >
+        {formatISK(minPriceWithTax)}
+        {copying === 'minPrice' && <Copy className="w-3 h-3 text-green-400" />}
+      </span>
+      <span className="text-xs text-gray-500">
+        per unit {salesTax > 0 && `(+${(salesTax * 100).toFixed(1)}% tax)`}
+      </span>
     </div>
   );
 };

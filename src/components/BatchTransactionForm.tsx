@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -107,90 +107,68 @@ const BatchTransactionForm: React.FC<BatchTransactionFormProps> = ({ onClose, on
     const lines = value.trim().split('\n');
     const transactions: ParsedTransaction[] = [];
     const seenTransactions = new Set<string>();
+    const pasteTransactionMap = new Map<string, ParsedTransaction>();
 
     // Pre-populate seenTransactions with existing transactions from jobs
-    console.log('Starting to check existing transactions from jobs...');
     eligibleJobs.forEach(job => {
-      console.log(`Checking job ${job.id} (${job.outputItem}) with ${job.income.length} income transactions`);
       job.income.forEach(tx => {
         const key = createTransactionKeyFromRecord(tx);
         seenTransactions.add(key);
-        console.log('Added existing transaction key to Set:', key);
       });
     });
-    console.log('Finished adding existing transactions. Set size:', seenTransactions.size);
-    console.log('Current Set contents:', Array.from(seenTransactions));
 
     let duplicates = 0;
     lines.forEach((line, index) => {
-      console.log(`\nProcessing line ${index + 1}:`, line);
       const parsed = parseTransactionLine(line);
       if (parsed) {
         const transactionKey = createTransactionKey(parsed);
         const isDuplicate = seenTransactions.has(transactionKey);
-        console.log('Transaction check:', {
-          key: transactionKey,
-          isDuplicate,
-          setSize: seenTransactions.size,
-          setContains: Array.from(seenTransactions).includes(transactionKey)
-        });
 
         if (isDuplicate) {
-          console.log('DUPLICATE FOUND:', transactionKey);
           duplicates++;
         }
 
-        if (!isDuplicate) {
-          console.log('New transaction - Adding to Set:', transactionKey);
-          seenTransactions.add(transactionKey);
+        // Check if this exact transaction already exists in our paste data
+        if (pasteTransactionMap.has(transactionKey)) {
+          // Merge with existing transaction in paste
+          const existing = pasteTransactionMap.get(transactionKey)!;
+          existing.quantity += parsed.quantity;
+          existing.totalPrice += Math.abs(parsed.totalAmount);
+        } else {
+          // Add new transaction
+          const newTransaction: ParsedTransaction = {
+            date: parsed.date.toISOString(),
+            quantity: parsed.quantity,
+            itemName: parsed.itemName,
+            unitPrice: parsed.unitPrice,
+            totalPrice: Math.abs(parsed.totalAmount),
+            buyer: parsed.buyer,
+            location: parsed.location,
+            corporation: parsed.corporation,
+            wallet: parsed.wallet,
+            assignedJobId: !isDuplicate ? findMatchingJob(parsed.itemName) : undefined,
+            isDuplicate
+          };
+          pasteTransactionMap.set(transactionKey, newTransaction);
+
+          if (!isDuplicate) {
+            seenTransactions.add(transactionKey);
+          }
         }
-
-        const matchingJobId = !isDuplicate ? findMatchingJob(parsed.itemName) : undefined;
-
-        transactions.push({
-          date: parsed.date.toISOString(),
-          quantity: parsed.quantity,
-          itemName: parsed.itemName,
-          unitPrice: parsed.unitPrice,
-          totalPrice: Math.abs(parsed.totalAmount),
-          buyer: parsed.buyer,
-          location: parsed.location,
-          corporation: parsed.corporation,
-          wallet: parsed.wallet,
-          assignedJobId: matchingJobId,
-          isDuplicate
-        });
-      } else {
-        console.log('Failed to parse line:', line);
       }
     });
 
-    console.log('Final results:', {
-      processedLines: lines.length,
-      validTransactions: transactions.length,
-      duplicatesFound: duplicates,
-      finalSetSize: seenTransactions.size
-    });
-
+    // Convert map to array for display - each transaction is individual
+    const transactionList = Array.from(pasteTransactionMap.values());
     setDuplicatesFound(duplicates);
 
-    // Group transactions by item name
-    const groups = transactions.reduce((acc, tx) => {
-      const existing = acc.find(g => g.itemName === tx.itemName);
-      if (existing) {
-        existing.transactions.push(tx);
-        existing.totalQuantity += tx.quantity;
-        existing.totalValue += tx.totalPrice;
-      } else {
-        acc.push({
-          itemName: tx.itemName,
-          transactions: [tx],
-          totalQuantity: tx.quantity,
-          totalValue: tx.totalPrice
-        });
-      }
-      return acc;
-    }, [] as TransactionGroup[]);
+    // Create individual transaction groups (no grouping by item name)
+    const groups = transactionList.map(tx => ({
+      itemName: tx.itemName,
+      transactions: [tx],
+      totalQuantity: tx.quantity,
+      totalValue: tx.totalPrice
+    }));
 
     setTransactionGroups(groups);
   };
@@ -261,7 +239,7 @@ const BatchTransactionForm: React.FC<BatchTransactionFormProps> = ({ onClose, on
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <Badge variant="outline" className="text-blue-400 border-blue-400">
-                    {transactionGroups.length} item types found
+                    {transactionGroups.length} transactions found
                   </Badge>
                   {duplicatesFound > 0 && (
                     <Badge variant="outline" className="text-yellow-400 border-yellow-400">

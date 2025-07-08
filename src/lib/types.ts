@@ -1,3 +1,4 @@
+
 import { IndJobStatusOptions, IndTransactionRecord } from "./pbtypes"
 import { IsoDateString } from "./pbtypes"
 import { IndBillitemRecord } from "./pbtypes"
@@ -21,3 +22,5 @@ export type IndJob = {
 	projectedCost?: number
 	projectedRevenue?: number
 }
+
+export type IndTransaction = IndTransactionRecord;

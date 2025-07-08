@@ -9,7 +9,7 @@ export function useJobs() {
 
   useEffect(() => {
     let mounted = true;
-    
+
     const loadJobs = async (visibleStatuses?: string[]) => {
       try {
         setLoading(true);
