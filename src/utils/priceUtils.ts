@@ -55,8 +55,12 @@ export const parseTransactionLine = (line: string): PastedTransaction | null => 
     const quantity = parseInt(quantityStr.replace(/,/g, ''));
 
     // Parse prices
-    const unitPrice = parseISKAmount(unitPriceStr);
-    const totalPrice = parseISKAmount(totalAmountStr);
+    let unitPrice = parseISKAmount(unitPriceStr);
+    let totalPrice = parseISKAmount(totalAmountStr);
+
+    if (totalPrice < 0) {
+      totalPrice = -totalPrice;
+    }
 
     return {
       date: date.toISOString(),

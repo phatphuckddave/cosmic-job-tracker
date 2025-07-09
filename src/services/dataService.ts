@@ -71,7 +71,7 @@ export class DataService {
       if (visibleStatuses) {
         // Mark these statuses as loaded
         visibleStatuses.forEach(status => this.loadedStatuses.add(status));
-        
+
         // Merge with existing jobs, replacing jobs with same IDs
         const existingJobIds = new Set(jobs.map(job => job.id));
         const otherJobs = this.jobs.filter(job => !existingJobIds.has(job.id));
@@ -83,10 +83,10 @@ export class DataService {
         const allStatuses = new Set(jobs.map(job => job.status));
         allStatuses.forEach(status => this.loadedStatuses.add(status));
       }
-      
+
       // Use setTimeout to defer the notification to prevent immediate re-renders
       setTimeout(() => this.notifyListeners(), 0);
-      
+
       return this.getJobs();
     }).finally(() => {
       this.loadPromise = null;

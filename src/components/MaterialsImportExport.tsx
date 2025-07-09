@@ -1,12 +1,18 @@
+
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Import, Download, FileText } from 'lucide-react';
-import { IndBillitemRecord, IndBillitemRecordNoId } from '@/lib/pbtypes';
+import { FileText } from 'lucide-react';
+import { IndBillitemRecord } from '@/lib/pbtypes';
 import { IndJob } from '@/lib/types';
 import { dataService } from '@/services/dataService';
+import { useToast } from '@/hooks/use-toast';
+import { useMaterialsCalculations } from '@/hooks/useMaterialsCalculations';
+import { parseBillOfMaterials, parseConsumedMaterials } from '@/utils/materialsParser';
+import { exportBillOfMaterials, exportConsumedMaterials, exportMissingMaterials } from '@/utils/materialsExporter';
+import MaterialsActions from './MaterialsActions';
+import MaterialsList from './MaterialsList';
 
 interface MaterialsImportExportProps {
   job?: IndJob;
@@ -25,50 +31,8 @@ const MaterialsImportExport: React.FC<MaterialsImportExportProps> = ({
 }) => {
   const [bomInput, setBomInput] = useState('');
   const [consumedInput, setConsumedInput] = useState('');
-
-  const parseBillOfMaterials = (text: string): IndBillitemRecordNoId[] => {
-    const lines = text.split('\n').filter(line => line.trim());
-    const materials: IndBillitemRecordNoId[] = [];
-
-    for (const line of lines) {
-      const parts = line.trim().split(/\s+/);
-      if (parts.length >= 2) {
-        const name = parts.slice(0, -1).join(' ');
-        const quantity = parseInt(parts[parts.length - 1]);
-        if (name && !isNaN(quantity)) {
-          materials.push({ name, quantity });
-        }
-      }
-    }
-
-    return materials;
-  };
-
-  const parseConsumedMaterials = (text: string): IndBillitemRecordNoId[] => {
-    const lines = text.split('\n').filter(line => line.trim());
-    const materials: IndBillitemRecordNoId[] = [];
-
-    for (const line of lines) {
-      const parts = line.trim().split('\t');
-      if (parts.length >= 2) {
-        const name = parts[0];
-        const quantity = parseInt(parts[1]);
-        if (name && !isNaN(quantity)) {
-          materials.push({ name, quantity });
-        }
-      }
-    }
-
-    return materials;
-  };
-
-  const exportBillOfMaterials = (): string => {
-    return billOfMaterials.map(item => `${item.name} ${item.quantity}`).join('\n');
-  };
-
-  const exportConsumedMaterials = (): string => {
-    return consumedMaterials.map(item => `${item.name}\t${item.quantity}`).join('\n');
-  };
+  const { toast } = useToast();
+  const { calculateMissingMaterials } = useMaterialsCalculations(job, billOfMaterials);
 
   const handleImportBom = async () => {
     if (!job) return;
@@ -101,14 +65,45 @@ const MaterialsImportExport: React.FC<MaterialsImportExportProps> = ({
   };
 
   const handleExportBom = () => {
-    const exported = exportBillOfMaterials();
+    const exported = exportBillOfMaterials(billOfMaterials);
     navigator.clipboard.writeText(exported);
+    toast({
+      title: "Exported",
+      description: "Bill of materials copied to clipboard",
+      duration: 2000,
+    });
   };
 
   const handleExportConsumed = () => {
-    const exported = exportConsumedMaterials();
+    const exported = exportConsumedMaterials(consumedMaterials);
     navigator.clipboard.writeText(exported);
+    toast({
+      title: "Exported",
+      description: "Consumed materials copied to clipboard",
+      duration: 2000,
+    });
   };
+
+  const handleExportMissing = () => {
+    const missingMaterials = calculateMissingMaterials();
+    const exported = exportMissingMaterials(missingMaterials);
+    if (exported) {
+      navigator.clipboard.writeText(exported);
+      toast({
+        title: "Exported",
+        description: "Missing materials copied to clipboard",
+        duration: 2000,
+      });
+    } else {
+      toast({
+        title: "Nothing Missing",
+        description: "All materials are satisfied for this job",
+        duration: 2000,
+      });
+    }
+  };
+
+  const missingMaterials = calculateMissingMaterials();
 
   return (
     <Card className="bg-gray-900 border-gray-700 text-white">
@@ -120,18 +115,15 @@ const MaterialsImportExport: React.FC<MaterialsImportExportProps> = ({
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Label className="text-gray-300">Bill of Materials</Label>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleExportBom}
-              className="border-gray-600 hover:bg-gray-800"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
-          </div>
+          <Label className="text-gray-300">Bill of Materials</Label>
+          <MaterialsActions
+            type="bom"
+            onImport={handleImportBom}
+            onExport={handleExportBom}
+            onExportMissing={handleExportMissing}
+            importDisabled={!job}
+            missingDisabled={!job || missingMaterials.length === 0}
+          />
           <Textarea
             placeholder="Paste bill of materials here (e.g., Mexallon 1000)"
             value={bomInput}
@@ -139,29 +131,16 @@ const MaterialsImportExport: React.FC<MaterialsImportExportProps> = ({
             className="bg-gray-800 border-gray-600 text-white"
             rows={4}
           />
-          <Button
-            onClick={handleImportBom}
-            className="bg-blue-600 hover:bg-blue-700"
-            disabled={!job}
-          >
-            <Import className="w-4 h-4 mr-2" />
-            Import Bill of Materials
-          </Button>
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Label className="text-gray-300">Consumed Materials</Label>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleExportConsumed}
-              className="border-gray-600 hover:bg-gray-800"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
-          </div>
+          <Label className="text-gray-300">Consumed Materials</Label>
+          <MaterialsActions
+            type="consumed"
+            onImport={handleImportConsumed}
+            onExport={handleExportConsumed}
+            importDisabled={!job}
+          />
           <Textarea
             placeholder="Paste consumed materials here (tab-separated: Item\tRequired)"
             value={consumedInput}
@@ -169,37 +148,23 @@ const MaterialsImportExport: React.FC<MaterialsImportExportProps> = ({
             className="bg-gray-800 border-gray-600 text-white"
             rows={4}
           />
-          <Button
-            onClick={handleImportConsumed}
-            className="bg-blue-600 hover:bg-blue-700"
-            disabled={!job}
-          >
-            <Import className="w-4 h-4 mr-2" />
-            Import Consumed Materials
-          </Button>
         </div>
 
-        {billOfMaterials.length > 0 && (
-          <div className="space-y-2">
-            <Label className="text-gray-300">Current Bill of Materials:</Label>
-            <div className="text-sm text-gray-400 max-h-32 overflow-y-auto">
-              {billOfMaterials.map((item, index) => (
-                <div key={index}>{item.name}: {item.quantity.toLocaleString()}</div>
-              ))}
-            </div>
-          </div>
-        )}
+        <MaterialsList
+          title="Current Bill of Materials"
+          materials={billOfMaterials}
+        />
 
-        {consumedMaterials.length > 0 && (
-          <div className="space-y-2">
-            <Label className="text-gray-300">Current Consumed Materials:</Label>
-            <div className="text-sm text-gray-400 max-h-32 overflow-y-auto">
-              {consumedMaterials.map((item, index) => (
-                <div key={index}>{item.name}: {item.quantity.toLocaleString()}</div>
-              ))}
-            </div>
-          </div>
-        )}
+        <MaterialsList
+          title="Current Consumed Materials"
+          materials={consumedMaterials}
+        />
+
+        <MaterialsList
+          title="Missing Materials"
+          materials={missingMaterials}
+          className="text-red-400"
+        />
       </CardContent>
     </Card>
   );
