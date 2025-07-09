@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Plus, Factory, TrendingUp, Briefcase, FileText, Settings } from 'lucide-react';
+import { Plus, Factory, TrendingUp, Briefcase, FileText, Settings, BarChart3 } from 'lucide-react';
 import { IndTransactionRecordNoId, IndJobRecordNoId } from '@/lib/pbtypes';
 import { formatISK } from '@/utils/priceUtils';
 import { getStatusPriority } from '@/utils/jobStatusUtils';
@@ -16,6 +16,7 @@ import { useJobs } from '@/hooks/useDataService';
 import { useJobMetrics } from '@/hooks/useJobMetrics';
 import SearchOverlay from '@/components/SearchOverlay';
 import RecapPopover from '@/components/RecapPopover';
+import TransactionChart from '@/components/TransactionChart';
 
 const Index = () => {
   const {
@@ -35,6 +36,8 @@ const Index = () => {
   const [showBatchForm, setShowBatchForm] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [totalRevenueChartOpen, setTotalRevenueChartOpen] = useState(false);
+  const [totalProfitChartOpen, setTotalProfitChartOpen] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
     const saved = localStorage.getItem('jobGroupsCollapsed');
     return saved ? JSON.parse(saved) : {};
@@ -220,6 +223,14 @@ const Index = () => {
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5" />
               Total Revenue
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 ml-auto"
+                onClick={() => setTotalRevenueChartOpen(true)}
+              >
+                <BarChart3 className="w-4 h-4" />
+              </Button>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -239,6 +250,14 @@ const Index = () => {
             <CardTitle className="flex items-center gap-2">
               <Briefcase className="w-5 h-5" />
               Total Profit
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 ml-auto"
+                onClick={() => setTotalProfitChartOpen(true)}
+              >
+                <BarChart3 className="w-4 h-4" />
+              </Button>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -321,6 +340,20 @@ const Index = () => {
           onTransactionsAssigned={handleBatchTransactionsAssigned}
         />
       )}
+
+      <TransactionChart
+        jobs={regularJobs}
+        type="total-revenue"
+        isOpen={totalRevenueChartOpen}
+        onClose={() => setTotalRevenueChartOpen(false)}
+      />
+
+      <TransactionChart
+        jobs={regularJobs}
+        type="total-profit"
+        isOpen={totalProfitChartOpen}
+        onClose={() => setTotalProfitChartOpen(false)}
+      />
     </div>
   );
 };

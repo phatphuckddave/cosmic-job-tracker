@@ -1,6 +1,9 @@
 import PocketBase from 'pocketbase';
 import { TypedPocketBase } from './pbtypes';
-import { POCKETBASE_SUPERUSER_EMAIL, POCKETBASE_SUPERUSER_PASSWORD } from './pocketbaseAdmin';
+
+// Admin credentials for PocketBase
+const POCKETBASE_SUPERUSER_EMAIL = 'admin@admin.com';
+const POCKETBASE_SUPERUSER_PASSWORD = 'admin1234567890';
 
 const pb = new PocketBase('https://evebase.site.quack-lab.dev') as TypedPocketBase;
 

@@ -1,6 +1,6 @@
 
 import { Button } from '@/components/ui/button';
-import { Import, Upload, Check } from 'lucide-react';
+import { Download, Upload, Check } from 'lucide-react';
 import { IndJob } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useClipboard } from '@/hooks/useClipboard';
@@ -95,7 +95,7 @@ const BOMActions: React.FC<BOMActionsProps> = ({ job, onImportBOM }) => {
         title="Import BOM from clipboard"
         data-no-navigate
       >
-        <Import className="w-4 h-4 text-blue-400" />
+        <Download className="w-4 h-4 text-blue-400" />
       </Button>
       <Button
         variant="ghost"

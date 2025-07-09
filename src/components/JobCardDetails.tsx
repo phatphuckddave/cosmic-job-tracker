@@ -92,10 +92,9 @@ const JobCardDetails: React.FC<JobCardDetailsProps> = ({ job }) => {
 
   const handleClick = (fieldName: string, value: string | null, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (value) {
-      setEditingField(fieldName);
-      setTempValues({ ...tempValues, [fieldName]: formatDateForInput(value) });
-    }
+    // Allow editing regardless of whether value exists or not
+    setEditingField(fieldName);
+    setTempValues({ ...tempValues, [fieldName]: formatDateForInput(value) });
   };
 
   const DateField = ({ label, value, fieldName, icon }: { label: string; value: string | null; fieldName: string; icon: React.ReactNode }) => (
@@ -202,7 +201,7 @@ interface PriceDisplayProps {
 const PriceDisplay: React.FC<PriceDisplayProps> = ({ job }) => {
   const { copying, copyToClipboard } = useClipboard();
   const [salesTax, setSalesTax] = useState(() => parseFloat(localStorage.getItem('salesTax') || '0') / 100);
-  
+
   // Listen for storage changes to update tax rate
   useEffect(() => {
     const handleStorageChange = () => {
@@ -218,23 +217,35 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({ job }) => {
     const factor = Math.pow(10, digits - 1 - magnitude);
     return Math.round(num * factor) / factor;
   };
-  
-  // Calculate total costs
+
+  // Calculate total costs and income
   const totalCosts = job.expenditures?.reduce((sum, tx) => sum + tx.totalPrice, 0) || 0;
-  
-  // Target price (based on projected revenue)
+  const totalIncome = job.income?.reduce((sum, tx) => sum + tx.totalPrice, 0) || 0;
+  const itemsSold = job.income?.reduce((sum, tx) => sum + tx.quantity, 0) || 0;
+  const itemsRemaining = (job.produced || 0) - itemsSold;
+
+  // Original calculations (based on full revenue and costs)
   const targetPricePerUnit = job.projectedRevenue / job.produced;
   const targetPriceWithTax = roundToSignificantDigits(targetPricePerUnit * (1 + salesTax));
-  
-  // Break-even price (based on actual costs)
+
   const breakEvenPricePerUnit = totalCosts / job.produced;
   const breakEvenPriceWithTax = roundToSignificantDigits(breakEvenPricePerUnit * (1 + salesTax));
-  
+
+  // Adjusted calculations (based on remaining revenue and uncovered costs)
+  const remainingRevenue = job.projectedRevenue - totalIncome;
+  const uncoveredCosts = totalCosts - totalIncome;
+
+  const adjustedTargetPricePerUnit = itemsRemaining > 0 ? remainingRevenue / itemsRemaining : 0;
+  const adjustedTargetPriceWithTax = roundToSignificantDigits(adjustedTargetPricePerUnit * (1 + salesTax));
+
+  const adjustedBreakEvenPricePerUnit = itemsRemaining > 0 ? Math.max(0, uncoveredCosts / itemsRemaining) : 0;
+  const adjustedBreakEvenPriceWithTax = roundToSignificantDigits(adjustedBreakEvenPricePerUnit * (1 + salesTax));
+
   const handleCopyTargetPrice = async (e: React.MouseEvent) => {
     e.stopPropagation();
     await copyToClipboard(
-      targetPriceWithTax.toString(), 
-      'targetPrice', 
+      targetPriceWithTax.toString(),
+      'targetPrice',
       'Target price copied to clipboard'
     );
   };
@@ -242,21 +253,44 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({ job }) => {
   const handleCopyBreakEvenPrice = async (e: React.MouseEvent) => {
     e.stopPropagation();
     await copyToClipboard(
-      breakEvenPriceWithTax.toString(), 
-      'breakEvenPrice', 
+      breakEvenPriceWithTax.toString(),
+      'breakEvenPrice',
       'Break-even price copied to clipboard'
+    );
+  };
+
+  const handleCopyAdjustedTargetPrice = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await copyToClipboard(
+      adjustedTargetPriceWithTax.toString(),
+      'adjustedTargetPrice',
+      'Adjusted target price copied to clipboard'
+    );
+  };
+
+  const handleCopyAdjustedBreakEvenPrice = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await copyToClipboard(
+      adjustedBreakEvenPriceWithTax.toString(),
+      'adjustedBreakEvenPrice',
+      'Adjusted break-even price copied to clipboard'
     );
   };
 
   const taxSuffix = salesTax > 0 ? ` (+${(salesTax * 100).toFixed(1)}% tax)` : '';
 
   return (
-    <div className="grid gap-x-4 gap-y-2 text-sm" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
-      <div className="col-span-2 flex items-center gap-2 text-gray-400">
+    <div className="grid gap-x-4 gap-y-2 text-sm" style={{ gridTemplateColumns: '1fr 1fr' }}>
+      <div className="flex items-center gap-2 text-gray-400 justify-center">
         <Factory className="w-4 h-4" />
         <span>Target Price{taxSuffix}:</span>
       </div>
-      <div className="col-span-2 flex items-center gap-1">
+      <div className="flex items-center gap-2 text-gray-400 justify-center">
+        <DollarSign className="w-4 h-4" />
+        <span>Break-even{taxSuffix}:</span>
+      </div>
+
+      <div className="flex items-center gap-1 text-lg justify-center">
         <span
           className="cursor-pointer hover:text-blue-400 transition-colors inline-flex items-center gap-1 text-white"
           onClick={handleCopyTargetPrice}
@@ -267,12 +301,7 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({ job }) => {
           {copying === 'targetPrice' && <Copy className="w-3 h-3 text-green-400" />}
         </span>
       </div>
-      
-      <div className="col-span-2 flex items-center gap-2 text-gray-400">
-        <DollarSign className="w-4 h-4" />
-        <span>Break-even{taxSuffix}:</span>
-      </div>
-      <div className="col-span-2 flex items-center gap-1">
+      <div className="flex items-center gap-1 text-lg justify-center">
         <span
           className="cursor-pointer hover:text-yellow-400 transition-colors inline-flex items-center gap-1 text-white"
           onClick={handleCopyBreakEvenPrice}
@@ -281,6 +310,38 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({ job }) => {
         >
           {formatISK(breakEvenPriceWithTax)}
           {copying === 'breakEvenPrice' && <Copy className="w-3 h-3 text-green-400" />}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2 text-gray-400 justify-center">
+        <Factory className="w-4 h-4" />
+        <span>Adjusted Target{taxSuffix}:</span>
+      </div>
+      <div className="flex items-center gap-2 text-gray-400 justify-center">
+        <DollarSign className="w-4 h-4" />
+        <span>Adjusted Break-even{taxSuffix}:</span>
+      </div>
+      
+      <div className="flex items-center gap-1 text-lg justify-center">
+        <span
+          className="cursor-pointer hover:text-blue-400 transition-colors inline-flex items-center gap-1 text-white"
+          onClick={handleCopyAdjustedTargetPrice}
+          title="Click to copy adjusted target price per unit (based on remaining revenue)"
+          data-no-navigate
+        >
+          {formatISK(adjustedTargetPriceWithTax)}
+          {copying === 'adjustedTargetPrice' && <Copy className="w-3 h-3 text-green-400" />}
+        </span>
+      </div>
+      <div className="flex items-center gap-1 text-lg justify-center">
+        <span
+          className="cursor-pointer hover:text-yellow-400 transition-colors inline-flex items-center gap-1 text-white"
+          onClick={handleCopyAdjustedBreakEvenPrice}
+          title="Click to copy adjusted break-even price per unit (based on uncovered costs)"
+          data-no-navigate
+        >
+          {formatISK(adjustedBreakEvenPriceWithTax)}
+          {copying === 'adjustedBreakEvenPrice' && <Copy className="w-3 h-3 text-green-400" />}
         </span>
       </div>
     </div>

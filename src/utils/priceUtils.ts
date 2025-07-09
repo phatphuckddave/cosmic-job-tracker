@@ -1,3 +1,4 @@
+import { IndTransactionRecordNoId } from "@/lib/pbtypes";
 
 export const parseISKAmount = (iskString: string): number => {
   // Remove "ISK" and any extra whitespace
@@ -26,17 +27,12 @@ export const formatISK = (amount: number): string => {
   return `${sign}${formatted} ISK`;
 };
 
-export const parseTransactionLine = (line: string): {
-  date: Date;
-  quantity: number;
-  itemName: string;
-  unitPrice: number;
-  totalAmount: number;
-  buyer?: string;
-  location?: string;
-  corporation?: string;
-  wallet?: string;
-} | null => {
+export type PastedTransaction = IndTransactionRecordNoId & {
+  assignedJobId?: string;
+  isDuplicate?: boolean;
+}
+
+export const parseTransactionLine = (line: string): PastedTransaction | null => {
   try {
     const parts = line.split('\t');
     if (parts.length < 6) return null;
@@ -60,14 +56,14 @@ export const parseTransactionLine = (line: string): {
 
     // Parse prices
     const unitPrice = parseISKAmount(unitPriceStr);
-    const totalAmount = parseISKAmount(totalAmountStr);
+    const totalPrice = parseISKAmount(totalAmountStr);
 
     return {
-      date,
+      date: date.toISOString(),
       quantity,
       itemName,
       unitPrice,
-      totalAmount,
+      totalPrice,
       buyer,
       location,
       corporation,

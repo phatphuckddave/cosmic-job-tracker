@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { parseTransactionLine, formatISK } from '@/utils/priceUtils';
+import { parseTransactionLine, formatISK, PastedTransaction } from '@/utils/priceUtils';
 import { IndTransactionRecordNoId } from '@/lib/pbtypes';
 import { Check, X } from 'lucide-react';
 
@@ -27,20 +27,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ jobId, onTransactions
     const transactions: IndTransactionRecordNoId[] = [];
 
     lines.forEach((line, index) => {
-      const parsed = parseTransactionLine(line);
+      const parsed: PastedTransaction | null = parseTransactionLine(line);
+
       if (parsed) {
-        transactions.push({
-          date: parsed.date.toISOString(),
-          quantity: parsed.quantity,
-          itemName: parsed.itemName,
-          unitPrice: parsed.unitPrice,
-          totalPrice: Math.abs(parsed.totalAmount),
-          buyer: parsed.buyer,
-          location: parsed.location,
-          corporation: parsed.corporation,
-          wallet: parsed.wallet,
-          job: jobId
-        });
+        transactions.push(parsed);
       }
     });
 

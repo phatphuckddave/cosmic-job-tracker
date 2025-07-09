@@ -1,12 +1,14 @@
-
 import { CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Copy } from 'lucide-react';
+import { Copy, BarChart3 } from 'lucide-react';
 import { IndJob } from '@/lib/types';
 import { useClipboard } from '@/hooks/useClipboard';
+import { useJobs } from '@/hooks/useDataService';
+import { useState } from 'react';
 import JobStatusDropdown from './JobStatusDropdown';
 import BOMActions from './BOMActions';
 import EditableProduced from './EditableProduced';
+import TransactionChart from './TransactionChart';
 
 interface JobCardHeaderProps {
   job: IndJob;
@@ -24,6 +26,10 @@ const JobCardHeader: React.FC<JobCardHeaderProps> = ({
   onImportBOM
 }) => {
   const { copying, copyToClipboard } = useClipboard();
+  const { jobs } = useJobs();
+  const [overviewChartOpen, setOverviewChartOpen] = useState(false);
+  const [totalRevenueChartOpen, setTotalRevenueChartOpen] = useState(false);
+  const [totalProfitChartOpen, setTotalProfitChartOpen] = useState(false);
 
   const sortedIncome = [...job.income].sort((a, b) =>
     new Date(b.date).getTime() - new Date(a.date).getTime()
@@ -55,7 +61,7 @@ const JobCardHeader: React.FC<JobCardHeaderProps> = ({
             <span className="ml-4">
               Produced: <EditableProduced job={job} onUpdateProduced={onUpdateProduced} />
             </span>
-            <span className="ml-4">
+            <span className="ml-4 items-center gap-1">
               Sold: <span className="text-green-400">{itemsSold.toLocaleString()}</span>
             </span>
           </div>
@@ -82,8 +88,42 @@ const JobCardHeader: React.FC<JobCardHeaderProps> = ({
             Delete
           </Button>
         </div>
-        <BOMActions job={job} onImportBOM={onImportBOM} />
+        <div className="flex">
+          <button
+            className="text-gray-400 hover:text-blue-300 transition-colors px-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOverviewChartOpen(true);
+            }}
+            data-no-navigate
+            title="View transaction charts"
+          >
+            <BarChart3 className="w-4 h-4" />
+          </button>
+          <BOMActions job={job} onImportBOM={onImportBOM} />
+        </div>
       </div>
+
+      <TransactionChart
+        job={job}
+        type="profit"
+        isOpen={overviewChartOpen}
+        onClose={() => setOverviewChartOpen(false)}
+      />
+
+      <TransactionChart
+        jobs={jobs}
+        type="total-revenue"
+        isOpen={totalRevenueChartOpen}
+        onClose={() => setTotalRevenueChartOpen(false)}
+      />
+
+      <TransactionChart
+        jobs={jobs}
+        type="total-profit"
+        isOpen={totalProfitChartOpen}
+        onClose={() => setTotalProfitChartOpen(false)}
+      />
     </div>
   );
 };

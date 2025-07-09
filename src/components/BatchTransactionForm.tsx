@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { parseTransactionLine, formatISK } from '@/utils/priceUtils';
+import { parseTransactionLine, formatISK, PastedTransaction } from '@/utils/priceUtils';
 import { IndTransactionRecordNoId, IndJobStatusOptions } from '@/lib/pbtypes';
 import { IndJob } from '@/lib/types';
 import { X } from 'lucide-react';
@@ -16,14 +16,9 @@ interface BatchTransactionFormProps {
   jobs: IndJob[];
 }
 
-interface ParsedTransaction extends IndTransactionRecordNoId {
-  assignedJobId?: string;
-  isDuplicate?: boolean;
-}
-
 interface TransactionGroup {
   itemName: string;
-  transactions: ParsedTransaction[];
+  transactions: PastedTransaction[];
   totalQuantity: number;
   totalValue: number;
 }
@@ -59,25 +54,16 @@ const BatchTransactionForm: React.FC<BatchTransactionFormProps> = ({ onClose, on
     return dateStr.replace('T', ' ');
   };
 
-  const createTransactionKey = (parsed: ReturnType<typeof parseTransactionLine>): string => {
+  const createTransactionKey = (parsed: PastedTransaction): string => {
     if (!parsed) return '';
     const key = [
-      normalizeDate(parsed.date.toISOString()),
+      normalizeDate(parsed.date.toString()),
       parsed.itemName,
       parsed.quantity.toString(),
-      parsed.totalAmount.toString(),
+      parsed.totalPrice.toString(),
       parsed.buyer,
       parsed.location
     ].join('|');
-    console.log('Created key from parsed transaction:', {
-      key,
-      date: normalizeDate(parsed.date.toISOString()),
-      itemName: parsed.itemName,
-      quantity: parsed.quantity,
-      totalAmount: parsed.totalAmount,
-      buyer: parsed.buyer,
-      location: parsed.location
-    });
     return key;
   };
 
@@ -90,75 +76,71 @@ const BatchTransactionForm: React.FC<BatchTransactionFormProps> = ({ onClose, on
       tx.buyer,
       tx.location
     ].join('|');
-    console.log('Created key from existing transaction:', {
-      key,
-      date: normalizeDate(tx.date),
-      itemName: tx.itemName,
-      quantity: tx.quantity,
-      totalPrice: tx.totalPrice,
-      buyer: tx.buyer,
-      location: tx.location
-    });
     return key;
   };
 
   const handlePaste = (value: string) => {
     setPastedData(value);
     const lines = value.trim().split('\n');
-    const transactions: ParsedTransaction[] = [];
-    const seenTransactions = new Set<string>();
-    const pasteTransactionMap = new Map<string, ParsedTransaction>();
+    const pasteTransactionMap = new Map<string, PastedTransaction>();
 
-    // Pre-populate seenTransactions with existing transactions from jobs
-    eligibleJobs.forEach(job => {
-      job.income.forEach(tx => {
-        const key = createTransactionKeyFromRecord(tx);
-        seenTransactions.add(key);
-      });
-    });
-
-    let duplicates = 0;
-    lines.forEach((line, index) => {
-      const parsed = parseTransactionLine(line);
+    // STEP 1: First combine all identical transactions within the pasted data
+    lines.forEach((line) => {
+      const parsed: PastedTransaction | null = parseTransactionLine(line);
       if (parsed) {
-        const transactionKey = createTransactionKey(parsed);
-        const isDuplicate = seenTransactions.has(transactionKey);
+        const transactionKey: string = createTransactionKey(parsed);
 
-        if (isDuplicate) {
-          duplicates++;
-        }
-
-        // Check if this exact transaction already exists in our paste data
         if (pasteTransactionMap.has(transactionKey)) {
           // Merge with existing transaction in paste
           const existing = pasteTransactionMap.get(transactionKey)!;
           existing.quantity += parsed.quantity;
-          existing.totalPrice += Math.abs(parsed.totalAmount);
+          existing.totalPrice += Math.abs(parsed.totalPrice);
+          const newKey = createTransactionKey(existing);
+          pasteTransactionMap.set(newKey, existing);
+          pasteTransactionMap.delete(transactionKey); // Remove old key
         } else {
           // Add new transaction
-          const newTransaction: ParsedTransaction = {
-            date: parsed.date.toISOString(),
-            quantity: parsed.quantity,
-            itemName: parsed.itemName,
-            unitPrice: parsed.unitPrice,
-            totalPrice: Math.abs(parsed.totalAmount),
-            buyer: parsed.buyer,
-            location: parsed.location,
-            corporation: parsed.corporation,
-            wallet: parsed.wallet,
-            assignedJobId: !isDuplicate ? findMatchingJob(parsed.itemName) : undefined,
-            isDuplicate
-          };
-          pasteTransactionMap.set(transactionKey, newTransaction);
-
-          if (!isDuplicate) {
-            seenTransactions.add(transactionKey);
-          }
+          pasteTransactionMap.set(transactionKey, parsed);
         }
       }
     });
 
-    // Convert map to array for display - each transaction is individual
+    // STEP 2: Identify which jobs these transactions belong to
+    const relevantJobIds = new Set<string>();
+    pasteTransactionMap.forEach((transaction) => {
+      const matchingJobId = findMatchingJob(transaction.itemName);
+      if (matchingJobId) {
+        relevantJobIds.add(matchingJobId);
+        transaction.assignedJobId = matchingJobId;
+      }
+    });
+
+    // STEP 3: Only check against transactions from relevant jobs
+    const existingTransactionKeys = new Set<string>();
+    eligibleJobs.forEach(job => {
+      if (relevantJobIds.has(job.id)) {
+        job.income.forEach(tx => {
+          const key = createTransactionKeyFromRecord(tx);
+          existingTransactionKeys.add(key);
+        });
+      }
+    });
+
+    // STEP 4: Mark duplicates and assign jobs
+    let duplicates = 0;
+    pasteTransactionMap.forEach((transaction, key) => {
+      const isDuplicate = existingTransactionKeys.has(key);
+      transaction.isDuplicate = isDuplicate;
+
+      if (isDuplicate) {
+        duplicates++;
+        transaction.assignedJobId = undefined;
+      } else if (!!transaction.assignedJobId) {
+        transaction.assignedJobId = findMatchingJob(transaction.itemName);
+      }
+    });
+
+    // Convert map to array for display
     const transactionList = Array.from(pasteTransactionMap.values());
     setDuplicatesFound(duplicates);
 
@@ -208,11 +190,11 @@ const BatchTransactionForm: React.FC<BatchTransactionFormProps> = ({ onClose, on
   );
 
   return (
-    <div 
+    <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
       onClick={onClose}
     >
-      <Card 
+      <Card
         className="bg-gray-900 border-gray-700 text-white w-full max-w-4xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
@@ -350,4 +332,4 @@ const BatchTransactionForm: React.FC<BatchTransactionFormProps> = ({ onClose, on
   );
 };
 
-export default BatchTransactionForm; 
+export default BatchTransactionForm;
