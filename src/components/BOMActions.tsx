@@ -1,9 +1,10 @@
 
 import { Button } from '@/components/ui/button';
-import { Download, Upload, Check } from 'lucide-react';
+import { Download, Upload, Check, AlertTriangle } from 'lucide-react';
 import { IndJob } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useClipboard } from '@/hooks/useClipboard';
+import { useMaterialsCalculations } from '@/hooks/useMaterialsCalculations';
 
 interface BOMActionsProps {
   job: IndJob;
@@ -13,6 +14,7 @@ interface BOMActionsProps {
 const BOMActions: React.FC<BOMActionsProps> = ({ job, onImportBOM }) => {
   const { toast } = useToast();
   const { copying, copyToClipboard } = useClipboard();
+  const { calculateMissingMaterials } = useMaterialsCalculations(job, job.billOfMaterials || []);
 
   const importBillOfMaterials = async () => {
     if (!onImportBOM) {
@@ -85,6 +87,27 @@ const BOMActions: React.FC<BOMActionsProps> = ({ job, onImportBOM }) => {
     await copyToClipboard(text, 'bom', 'Bill of materials copied to clipboard');
   };
 
+  const exportMissingMaterials = async () => {
+    const missingMaterials = calculateMissingMaterials();
+    
+    if (missingMaterials.length === 0) {
+      toast({
+        title: "Nothing Missing",
+        description: "All materials are satisfied for this job",
+        duration: 2000,
+      });
+      return;
+    }
+
+    const text = missingMaterials
+      .map(item => `${item.name}\t${item.quantity.toLocaleString()}`)
+      .join('\n');
+
+    await copyToClipboard(text, 'missing', 'Missing materials copied to clipboard');
+  };
+
+  const missingMaterials = calculateMissingMaterials();
+
   return (
     <div className="flex gap-1">
       <Button
@@ -110,6 +133,21 @@ const BOMActions: React.FC<BOMActionsProps> = ({ job, onImportBOM }) => {
           <Check className="w-4 h-4 text-green-400" />
         ) : (
           <Upload className="w-4 h-4 text-blue-400" />
+        )}
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="p-1 h-6 w-6"
+        onClick={exportMissingMaterials}
+        disabled={missingMaterials.length === 0}
+        title="Export missing materials to clipboard"
+        data-no-navigate
+      >
+        {copying === 'missing' ? (
+          <Check className="w-4 h-4 text-green-400" />
+        ) : (
+          <AlertTriangle className="w-4 h-4 text-red-400" />
         )}
       </Button>
     </div>

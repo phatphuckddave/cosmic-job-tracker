@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,6 +18,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ jobId, onTransactions
   const [pastedData, setPastedData] = useState('');
   const [parsedTransactions, setParsedTransactions] = useState<IndTransactionRecordNoId[]>([]);
   const [transactionType, setTransactionType] = useState<'expenditure' | 'income'>('expenditure');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto focus the textarea when component mounts or when transaction type changes
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [transactionType]);
 
   const handlePaste = (value: string) => {
     setPastedData(value);
@@ -69,6 +76,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ jobId, onTransactions
                 Paste EVE transaction data (Ctrl+V):
               </label>
               <Textarea
+                ref={textareaRef}
                 value={pastedData}
                 onChange={(e) => handlePaste(e.target.value)}
                 placeholder="Paste your EVE transaction data here..."

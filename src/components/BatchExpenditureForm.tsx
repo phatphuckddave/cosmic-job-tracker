@@ -1,15 +1,13 @@
 
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { parseTransactionLine, formatISK, PastedTransaction } from '@/utils/priceUtils';
-import { IndTransactionRecordNoId, IndJobStatusOptions } from '@/lib/pbtypes';
+import { Card, CardContent } from '@/components/ui/card';
+import { IndTransactionRecordNoId } from '@/lib/pbtypes';
 import { IndJob } from '@/lib/types';
-import { X } from 'lucide-react';
+import BatchExpenditureHeader from './batch-expenditure/BatchExpenditureHeader';
+import PasteExpenditureInput from './batch-expenditure/PasteExpenditureInput';
+import ExpenditureStats from './batch-expenditure/ExpenditureStats';
+import ExpenditureTable from './batch-expenditure/ExpenditureTable';
+import ExpenditureActions from './batch-expenditure/ExpenditureActions';
+import { useBatchExpenditureLogic } from '@/hooks/useBatchExpenditureLogic';
 
 interface BatchExpenditureFormProps {
   onClose: () => void;
@@ -17,158 +15,16 @@ interface BatchExpenditureFormProps {
   jobs: IndJob[];
 }
 
-interface TransactionGroup {
-  itemName: string;
-  transactions: PastedTransaction[];
-  totalQuantity: number;
-  totalValue: number;
-}
-
 const BatchExpenditureForm: React.FC<BatchExpenditureFormProps> = ({ onClose, onTransactionsAssigned, jobs }) => {
-  const [pastedData, setPastedData] = useState('');
-  const [transactionGroups, setTransactionGroups] = useState<TransactionGroup[]>([]);
-  const [duplicatesFound, setDuplicatesFound] = useState(0);
-
-  // Filter jobs that are in acquisition status
-  const eligibleJobs = jobs.filter(job => job.status === IndJobStatusOptions.Acquisition);
-
-  const findMatchingJob = (itemName: string): string | undefined => {
-    // Find jobs where the item is in the bill of materials and not satisfied
-    for (const job of eligibleJobs) {
-      const billItem = job.billOfMaterials?.find(item => 
-        item.name.toLowerCase() === itemName.toLowerCase()
-      );
-      
-      if (billItem) {
-        // Check if this material is already satisfied
-        const ownedQuantity = job.expenditures?.reduce((total, exp) => 
-          exp.itemName.toLowerCase() === itemName.toLowerCase() ? total + exp.quantity : total, 0
-        ) || 0;
-        
-        // Only return this job if we still need more of this material
-        if (ownedQuantity < billItem.quantity) {
-          return job.id;
-        }
-      }
-    }
-    return undefined;
-  };
-
-  const normalizeDate = (dateStr: string): string => {
-    return dateStr.replace('T', ' ');
-  };
-
-  const createTransactionKey = (parsed: PastedTransaction): string => {
-    if (!parsed) return '';
-    const key = [
-      normalizeDate(parsed.date.toString()),
-      parsed.itemName,
-      parsed.quantity.toString(),
-      Math.abs(parsed.totalPrice).toString(), // Use absolute value for expenditures
-      parsed.buyer,
-      parsed.location
-    ].join('|');
-    return key;
-  };
-
-  const createTransactionKeyFromRecord = (tx: IndTransactionRecordNoId): string => {
-    const key = [
-      normalizeDate(tx.date),
-      tx.itemName,
-      tx.quantity.toString(),
-      Math.abs(tx.totalPrice).toString(), // Use absolute value for expenditures
-      tx.buyer,
-      tx.location
-    ].join('|');
-    return key;
-  };
-
-  const handlePaste = (value: string) => {
-    setPastedData(value);
-    const lines = value.trim().split('\n');
-    const pasteTransactionMap = new Map<string, PastedTransaction>();
-
-    // STEP 1: Combine identical transactions within the pasted data
-    lines.forEach((line) => {
-      const parsed: PastedTransaction | null = parseTransactionLine(line);
-      if (parsed && parsed.totalPrice < 0) { // Only process expenditures (negative amounts)
-        // Convert to positive values for expenditures
-        parsed.totalPrice = Math.abs(parsed.totalPrice);
-        parsed.unitPrice = Math.abs(parsed.unitPrice);
-        
-        const transactionKey: string = createTransactionKey(parsed);
-
-        if (pasteTransactionMap.has(transactionKey)) {
-          const existing = pasteTransactionMap.get(transactionKey)!;
-          existing.quantity += parsed.quantity;
-          existing.totalPrice += parsed.totalPrice;
-          const newKey = createTransactionKey(existing);
-          pasteTransactionMap.set(newKey, existing);
-          pasteTransactionMap.delete(transactionKey);
-        } else {
-          pasteTransactionMap.set(transactionKey, parsed);
-        }
-      }
-    });
-
-    // STEP 2: Identify which jobs these transactions belong to
-    const relevantJobIds = new Set<string>();
-    pasteTransactionMap.forEach((transaction) => {
-      const matchingJobId = findMatchingJob(transaction.itemName);
-      if (matchingJobId) {
-        relevantJobIds.add(matchingJobId);
-        transaction.assignedJobId = matchingJobId;
-      }
-    });
-
-    // STEP 3: Check against existing expenditures from relevant jobs
-    const existingTransactionKeys = new Set<string>();
-    eligibleJobs.forEach(job => {
-      if (relevantJobIds.has(job.id)) {
-        job.expenditures?.forEach(tx => {
-          const key = createTransactionKeyFromRecord(tx);
-          existingTransactionKeys.add(key);
-        });
-      }
-    });
-
-    // STEP 4: Mark duplicates and assign jobs
-    let duplicates = 0;
-    pasteTransactionMap.forEach((transaction, key) => {
-      const isDuplicate = existingTransactionKeys.has(key);
-      transaction.isDuplicate = isDuplicate;
-
-      if (isDuplicate) {
-        duplicates++;
-        transaction.assignedJobId = undefined;
-      } else if (!transaction.assignedJobId) {
-        transaction.assignedJobId = findMatchingJob(transaction.itemName);
-      }
-    });
-
-    const transactionList = Array.from(pasteTransactionMap.values());
-    setDuplicatesFound(duplicates);
-
-    // Create individual transaction groups
-    const groups = transactionList.map(tx => ({
-      itemName: tx.itemName,
-      transactions: [tx],
-      totalQuantity: tx.quantity,
-      totalValue: tx.totalPrice
-    }));
-
-    setTransactionGroups(groups);
-  };
-
-  const handleAssignJob = (groupIndex: number, jobId: string) => {
-    setTransactionGroups(prev => {
-      const newGroups = [...prev];
-      newGroups[groupIndex].transactions.forEach(tx => {
-        tx.assignedJobId = jobId;
-      });
-      return newGroups;
-    });
-  };
+  const {
+    pastedData,
+    transactionGroups,
+    duplicatesFound,
+    eligibleJobs,
+    handlePaste,
+    handleAssignJob,
+    canSubmit
+  } = useBatchExpenditureLogic(jobs);
 
   const handleSubmit = () => {
     // Group transactions by assigned job
@@ -199,136 +55,29 @@ const BatchExpenditureForm: React.FC<BatchExpenditureFormProps> = ({ onClose, on
         className="bg-gray-900 border-gray-700 text-white w-full max-w-4xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <CardHeader className="flex flex-row items-center justify-between sticky top-0 bg-gray-900 border-b border-gray-700 z-10">
-          <CardTitle className="text-blue-400">Batch Expenditure Assignment</CardTitle>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="text-gray-400 hover:text-white"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </CardHeader>
+        <BatchExpenditureHeader onClose={onClose} />
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-300">
-              Paste EVE expenditure data (negative amounts):
-            </label>
-            <Textarea
-              value={pastedData}
-              onChange={(e) => handlePaste(e.target.value)}
-              placeholder="Paste your EVE expenditure transaction data here..."
-              className="min-h-32 bg-gray-800 border-gray-600 text-white"
-            />
-          </div>
+          <PasteExpenditureInput pastedData={pastedData} onPaste={handlePaste} />
 
           {transactionGroups.length > 0 && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <Badge variant="outline" className="text-blue-400 border-blue-400">
-                    {transactionGroups.length} expenditures found
-                  </Badge>
-                  {duplicatesFound > 0 && (
-                    <Badge variant="outline" className="text-yellow-400 border-yellow-400">
-                      {duplicatesFound} duplicates found
-                    </Badge>
-                  )}
-                </div>
-              </div>
+              <ExpenditureStats 
+                totalExpenditures={transactionGroups.length}
+                duplicatesFound={duplicatesFound}
+              />
 
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-gray-700">
-                    <TableHead className="text-gray-300">Material</TableHead>
-                    <TableHead className="text-gray-300">Quantity</TableHead>
-                    <TableHead className="text-gray-300">Total Cost</TableHead>
-                    <TableHead className="text-gray-300">Assign To Job</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactionGroups.map((group, index) => {
-                    const autoAssigned = group.transactions[0]?.assignedJobId;
-                    const isDuplicate = group.transactions[0]?.isDuplicate;
-                    const matchingJob = autoAssigned ? jobs.find(j => j.id === autoAssigned) : undefined;
+              <ExpenditureTable
+                transactionGroups={transactionGroups}
+                jobs={jobs}
+                eligibleJobs={eligibleJobs}
+                onAssignJob={handleAssignJob}
+              />
 
-                    return (
-                      <TableRow
-                        key={`${group.itemName}-${index}`}
-                        className={`border-gray-700 ${isDuplicate ? 'bg-red-900/30' : ''}`}
-                      >
-                        <TableCell className="text-white flex items-center gap-2">
-                          {group.itemName}
-                          {isDuplicate && (
-                            <Badge variant="destructive" className="bg-red-600">
-                              Duplicate
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-gray-300">
-                          {group.totalQuantity.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-red-400">
-                          {formatISK(group.totalValue)}
-                        </TableCell>
-                        <TableCell>
-                          {isDuplicate ? (
-                            <div className="text-red-400 text-sm">
-                              Transaction already exists
-                            </div>
-                          ) : (
-                            <Select
-                              value={group.transactions[0]?.assignedJobId || ''}
-                              onValueChange={(value) => handleAssignJob(index, value)}
-                            >
-                              <SelectTrigger
-                                className={`bg-gray-800 border-gray-600 text-white ${autoAssigned ? 'border-green-600' : ''}`}
-                              >
-                                <SelectValue placeholder={autoAssigned ? `Auto-assigned to ${matchingJob?.outputItem}` : 'Select a job'} />
-                              </SelectTrigger>
-                              <SelectContent className="bg-gray-800 border-gray-600">
-                                {eligibleJobs
-                                  .filter(job => 
-                                    job.billOfMaterials?.some(item => 
-                                      item.name.toLowerCase().includes(group.itemName.toLowerCase())
-                                    )
-                                  )
-                                  .map(job => (
-                                    <SelectItem
-                                      key={job.id}
-                                      value={job.id}
-                                      className="text-white"
-                                    >
-                                      {job.outputItem} (Acquisition)
-                                    </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={onClose}
-                  className="border-gray-600 hover:bg-gray-800"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSubmit}
-                  disabled={!transactionGroups.some(g => g.transactions.some(tx => !tx.isDuplicate && tx.assignedJobId))}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  Assign Expenditures
-                </Button>
-              </div>
+              <ExpenditureActions
+                onCancel={onClose}
+                onSubmit={handleSubmit}
+                canSubmit={canSubmit}
+              />
             </div>
           )}
         </CardContent>
