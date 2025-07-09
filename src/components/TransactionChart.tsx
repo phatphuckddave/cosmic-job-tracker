@@ -232,20 +232,19 @@ const TransactionChart: React.FC<TransactionChartProps> = ({
           <Legend />
           <Area
             type="monotone"
-            dataKey="costs"
+            dataKey="cumulativeCosts"
             stroke="#EF4444"
             fill="#EF4444"
-            fillOpacity={0.6}
-            name="Costs"
-          />
-          <Area
-            type="monotone"
-            dataKey="cumulativeCosts"
-            stroke="#DC2626"
-            fill="none"
-            strokeWidth={2}
-            strokeDasharray="5 5"
+            fillOpacity={0.3}
             name="Cumulative Costs"
+          />
+          <Line
+            type="monotone"
+            dataKey="costs"
+            stroke="#DC2626"
+            strokeWidth={2}
+            name="Costs per Day"
+            dot={false}
           />
         </AreaChart>
       );
@@ -265,28 +264,27 @@ const TransactionChart: React.FC<TransactionChartProps> = ({
           <Legend />
           <Area
             type="monotone"
-            dataKey="revenue"
+            dataKey="cumulativeRevenue"
             stroke="#10B981"
             fill="#10B981"
-            fillOpacity={0.6}
-            name="Revenue"
-          />
-          <Area
-            type="monotone"
-            dataKey="cumulativeRevenue"
-            stroke="#059669"
-            fill="none"
-            strokeWidth={2}
-            strokeDasharray="5 5"
+            fillOpacity={0.3}
             name="Cumulative Revenue"
+          />
+          <Line
+            type="monotone"
+            dataKey="revenue"
+            stroke="#059669"
+            strokeWidth={2}
+            name="Revenue per Day"
+            dot={false}
           />
         </AreaChart>
       );
     }
 
-    // Combined profit chart (costs, revenue, profit)
+    // Profit chart - entire job view
     return (
-      <LineChart data={data} margin={{ top: 20, right: 80, left: 80, bottom: 5 }}>
+      <AreaChart data={data} margin={{ top: 20, right: 80, left: 80, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
         <XAxis dataKey="formattedDate" stroke="#9CA3AF" />
         <YAxis stroke="#9CA3AF" tickFormatter={formatTooltipValue} width={70} />
@@ -295,63 +293,32 @@ const TransactionChart: React.FC<TransactionChartProps> = ({
           labelStyle={{ color: '#F3F4F6' }}
           contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151' }}
         />
-        <Legend 
-          onClick={(e) => toggleLine(e.dataKey as string)}
-          wrapperStyle={{ cursor: 'pointer' }}
+        <Legend />
+        <Area
+          type="monotone"
+          dataKey="cumulativeCosts"
+          stroke="#EF4444"
+          fill="#EF4444"
+          fillOpacity={0.3}
+          name="Cumulative Costs"
         />
-        {!hiddenLines.has('costs') && (
-          <Line
-            type="monotone"
-            dataKey="costs"
-            stroke="#EF4444"
-            strokeWidth={2}
-            name="Costs"
-            dot={{ fill: '#EF4444', strokeWidth: 2, r: 4 }}
-          />
-        )}
-        {!hiddenLines.has('revenue') && (
-          <Line
-            type="monotone"
-            dataKey="revenue"
-            stroke="#10B981"
-            strokeWidth={2}
-            name="Revenue"
-            dot={{ fill: '#10B981', strokeWidth: 2, r: 4 }}
-          />
-        )}
-        {!hiddenLines.has('profit') && (
-          <Line
-            type="monotone"
-            dataKey="profit"
-            stroke="#3B82F6"
-            strokeWidth={2}
-            name="Profit"
-            dot={{ fill: '#3B82F6', strokeWidth: 2, r: 4 }}
-          />
-        )}
-        {!hiddenLines.has('cumulativeRevenue') && (
-          <Line
-            type="monotone"
-            dataKey="cumulativeRevenue"
-            stroke="#059669"
-            strokeWidth={2}
-            strokeDasharray="5 5"
-            name="Cumulative Revenue"
-            dot={false}
-          />
-        )}
-        {!hiddenLines.has('cumulativeProfit') && (
-          <Line
-            type="monotone"
-            dataKey="cumulativeProfit"
-            stroke="#1E40AF"
-            strokeWidth={2}
-            strokeDasharray="5 5"
-            name="Cumulative Profit"
-            dot={false}
-          />
-        )}
-      </LineChart>
+        <Area
+          type="monotone"
+          dataKey="cumulativeRevenue"
+          stroke="#10B981"
+          fill="#10B981"
+          fillOpacity={0.3}
+          name="Cumulative Revenue"
+        />
+        <Line
+          type="monotone"
+          dataKey="profit"
+          stroke="#3B82F6"
+          strokeWidth={2}
+          name="Profit per Day"
+          dot={false}
+        />
+      </AreaChart>
     );
   };
 
