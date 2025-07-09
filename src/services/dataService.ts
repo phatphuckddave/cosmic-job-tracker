@@ -1,3 +1,4 @@
+
 import { IndJob } from '@/lib/types';
 import { IndJobRecord, IndJobRecordNoId, IndTransactionRecord, IndTransactionRecordNoId, IndBillitemRecord, IndBillitemRecordNoId } from '@/lib/pbtypes';
 import * as jobService from './jobService';
@@ -11,6 +12,7 @@ export class DataService {
   private listeners: Set<() => void> = new Set();
   private loadPromise: Promise<IndJob[]> | null = null;
   private initialized: Promise<void>;
+  private loadedStatuses: Set<string> = new Set();
 
   private constructor() {
     // Initialize with admin login
@@ -53,8 +55,13 @@ export class DataService {
       return this.loadPromise;
     }
 
-    // If we already have jobs loaded and no specific statuses requested, return them immediately
+    // If we already have all jobs loaded and no specific statuses requested, return them immediately
     if (this.jobs.length > 0 && !visibleStatuses) {
+      return Promise.resolve(this.getJobs());
+    }
+
+    // If requesting specific statuses that are already loaded, return current jobs
+    if (visibleStatuses && visibleStatuses.every(status => this.loadedStatuses.has(status))) {
       return Promise.resolve(this.getJobs());
     }
 
@@ -62,13 +69,24 @@ export class DataService {
     console.log('Loading jobs from database', visibleStatuses ? `for statuses: ${visibleStatuses.join(', ')}` : '');
     this.loadPromise = jobService.getJobs(visibleStatuses).then(jobs => {
       if (visibleStatuses) {
-        // If filtering by statuses, merge with existing jobs
-        const existingJobs = this.jobs.filter(job => !visibleStatuses.includes(job.status));
-        this.jobs = [...existingJobs, ...jobs];
+        // Mark these statuses as loaded
+        visibleStatuses.forEach(status => this.loadedStatuses.add(status));
+        
+        // Merge with existing jobs, replacing jobs with same IDs
+        const existingJobIds = new Set(jobs.map(job => job.id));
+        const otherJobs = this.jobs.filter(job => !existingJobIds.has(job.id));
+        this.jobs = [...otherJobs, ...jobs];
       } else {
+        // Loading all jobs
         this.jobs = jobs;
+        // Mark all unique statuses as loaded
+        const allStatuses = new Set(jobs.map(job => job.status));
+        allStatuses.forEach(status => this.loadedStatuses.add(status));
       }
-      this.notifyListeners();
+      
+      // Use setTimeout to defer the notification to prevent immediate re-renders
+      setTimeout(() => this.notifyListeners(), 0);
+      
       return this.getJobs();
     }).finally(() => {
       this.loadPromise = null;

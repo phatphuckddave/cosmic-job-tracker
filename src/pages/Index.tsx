@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,7 @@ const Index = () => {
     jobs,
     loading,
     error,
+    loadingStatuses,
     createJob,
     updateJob,
     deleteJob,
@@ -43,6 +44,10 @@ const Index = () => {
     return saved ? JSON.parse(saved) : {};
   });
 
+  // Track scroll position to prevent jarring jumps
+  const scrollPositionRef = useRef<number>(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
@@ -53,6 +58,16 @@ const Index = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Save scroll position before updates
+  useEffect(() => {
+    const handleScroll = () => {
+      scrollPositionRef.current = window.scrollY;
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   if (loading) {
@@ -93,9 +108,20 @@ const Index = () => {
 
   const { totalJobs, totalProfit, totalRevenue, calculateJobRevenue, calculateJobProfit } = useJobMetrics(regularJobs);
 
-  const handleCreateJob = async (jobData: IndJobRecordNoId) => {
+  const handleCreateJob = async (jobData: IndJobRecordNoId, billOfMaterials?: { name: string; quantity: number }[]) => {
     try {
-      await createJob(jobData);
+      const newJob = await createJob(jobData);
+      
+      // If we have bill of materials from the job dump, add them to the newly created job
+      if (billOfMaterials && billOfMaterials.length > 0) {
+        const billItems = billOfMaterials.map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          unitPrice: 0
+        }));
+        await createMultipleBillItems(newJob.id, billItems, 'billOfMaterials');
+      }
+      
       setShowJobForm(false);
     } catch (error) {
       console.error('Error creating job:', error);
@@ -159,13 +185,22 @@ const Index = () => {
     return groups;
   }, {} as Record<string, IndJob[]>);
 
-  const toggleGroup = (status: string) => {
+  const toggleGroup = async (status: string) => {
+    // Save current scroll position
+    const currentScrollY = window.scrollY;
+    
     const newState = { ...collapsedGroups, [status]: !collapsedGroups[status] };
     setCollapsedGroups(newState);
     localStorage.setItem('jobGroupsCollapsed', JSON.stringify(newState));
 
-    if (collapsedGroups[status]) {
-      loadJobsForStatuses([status]);
+    // If expanding and not currently loading this status
+    if (collapsedGroups[status] && !loadingStatuses.has(status)) {
+      await loadJobsForStatuses([status]);
+      
+      // Restore scroll position after a brief delay to allow for rendering
+      setTimeout(() => {
+        window.scrollTo(0, currentScrollY);
+      }, 50);
     }
   };
 
@@ -197,7 +232,7 @@ const Index = () => {
   }
 
   return (
-    <div className="container mx-auto p-4 space-y-4">
+    <div ref={containerRef} className="container mx-auto p-4 space-y-4">
       <SearchOverlay
         isOpen={searchOpen}
         onClose={() => {
@@ -312,6 +347,7 @@ const Index = () => {
               onDelete={handleDeleteJob}
               onUpdateProduced={handleUpdateProduced}
               onImportBOM={handleImportBOM}
+              isLoading={loadingStatuses.has(status)}
             />
           ))}
         </div>
@@ -329,6 +365,7 @@ const Index = () => {
             onUpdateProduced={handleUpdateProduced}
             onImportBOM={handleImportBOM}
             isTracked={true}
+            isLoading={loadingStatuses.has('Tracked')}
           />
         </div>
       )}

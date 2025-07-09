@@ -2,6 +2,7 @@
 import { IndJob } from '@/lib/types';
 import { getStatusColor } from '@/utils/jobStatusUtils';
 import JobCard from './JobCard';
+import { Loader2 } from 'lucide-react';
 
 interface JobGroupProps {
   status: string;
@@ -13,6 +14,7 @@ interface JobGroupProps {
   onUpdateProduced?: (jobId: string, produced: number) => void;
   onImportBOM?: (jobId: string, items: { name: string; quantity: number }[]) => void;
   isTracked?: boolean;
+  isLoading?: boolean;
 }
 
 const JobGroup: React.FC<JobGroupProps> = ({
@@ -24,7 +26,8 @@ const JobGroup: React.FC<JobGroupProps> = ({
   onDelete,
   onUpdateProduced,
   onImportBOM,
-  isTracked = false
+  isTracked = false,
+  isLoading = false
 }) => {
   return (
     <div className="space-y-4">
@@ -36,6 +39,7 @@ const JobGroup: React.FC<JobGroupProps> = ({
           <h3 className="text-xl font-semibold text-white flex items-center gap-3">
             <span>{status}</span>
             <span className="text-gray-200 text-lg">({jobs.length} jobs)</span>
+            {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
           </h3>
           <div className={`text-white text-lg transition-transform ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}>
             ⌄
@@ -45,17 +49,24 @@ const JobGroup: React.FC<JobGroupProps> = ({
 
       {!isCollapsed && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {jobs.map(job => (
-            <JobCard
-              key={job.id}
-              job={job}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onUpdateProduced={onUpdateProduced}
-              onImportBOM={onImportBOM}
-              isTracked={isTracked}
-            />
-          ))}
+          {isLoading ? (
+            <div className="col-span-full flex items-center justify-center p-8 text-gray-400">
+              <Loader2 className="w-6 h-6 animate-spin mr-2" />
+              Loading jobs...
+            </div>
+          ) : (
+            jobs.map(job => (
+              <JobCard
+                key={job.id}
+                job={job}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onUpdateProduced={onUpdateProduced}
+                onImportBOM={onImportBOM}
+                isTracked={isTracked}
+              />
+            ))
+          )}
         </div>
       )}
     </div>

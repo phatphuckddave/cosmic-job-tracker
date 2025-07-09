@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { IndJobStatusOptions, IndJobRecordNoId } from '@/lib/pbtypes';
 import { IndJob } from '@/lib/types';
@@ -10,41 +11,81 @@ import { parseISKAmount } from '@/utils/priceUtils';
 
 interface JobFormProps {
   job?: IndJob;
-  onSubmit: (job: IndJobRecordNoId) => void;
+  onSubmit: (job: IndJobRecordNoId, billOfMaterials?: { name: string; quantity: number }[]) => void;
   onCancel: () => void;
 }
-
-const formatDateForInput = (dateString: string | undefined | null): string => {
-  if (!dateString) return '';
-
-  // Create a date object in local timezone
-  const date = new Date(dateString);
-
-  // Format to YYYY-MM-DD
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  // Format to HH:MM
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-
-  // Combine into format required by datetime-local (YYYY-MM-DDTHH:MM)
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-};
 
 const JobForm: React.FC<JobFormProps> = ({ job, onSubmit, onCancel }) => {
   const [formData, setFormData] = useState({
     outputItem: job?.outputItem || '',
     outputQuantity: job?.outputQuantity || 0,
-    jobStart: formatDateForInput(job?.jobStart),
-    jobEnd: formatDateForInput(job?.jobEnd),
-    saleStart: formatDateForInput(job?.saleStart),
-    saleEnd: formatDateForInput(job?.saleEnd),
     status: job?.status || IndJobStatusOptions.Planned,
     projectedCost: job?.projectedCost || 0,
     projectedRevenue: job?.projectedRevenue || 0
   });
+
+  const [jobDump, setJobDump] = useState('');
+  const [parsedBillOfMaterials, setParsedBillOfMaterials] = useState<{ name: string; quantity: number }[]>([]);
+
+  const parseJobDump = (dumpText: string) => {
+    if (!dumpText.trim()) {
+      setParsedBillOfMaterials([]);
+      return;
+    }
+
+    const lines = dumpText.trim().split('\n').filter(line => line.trim());
+    
+    if (lines.length >= 3) {
+      // Parse first line: "Item Name Quantity"
+      const firstLine = lines[0].trim();
+      const lastSpaceIndex = firstLine.lastIndexOf(' ');
+      
+      if (lastSpaceIndex > 0) {
+        const itemName = firstLine.substring(0, lastSpaceIndex).trim();
+        const quantity = parseInt(firstLine.substring(lastSpaceIndex + 1).trim()) || 0;
+        
+        // Parse cost (second line)
+        const cost = parseISKAmount(lines[1].replace(/,/g, ''));
+        
+        // Parse revenue (third line)
+        const revenue = parseISKAmount(lines[2].replace(/,/g, ''));
+        
+        setFormData(prev => ({
+          ...prev,
+          outputItem: itemName,
+          outputQuantity: quantity,
+          projectedCost: cost,
+          projectedRevenue: revenue
+        }));
+
+        // Parse BOM - everything after the first 3 lines is BOM
+        const bomLines = lines.slice(3); // Start from line 4 (index 3)
+        const billOfMaterials: { name: string; quantity: number }[] = [];
+        
+        for (const line of bomLines) {
+          const trimmedLine = line.trim();
+          if (trimmedLine) {
+            const lastSpaceIndex = trimmedLine.lastIndexOf(' ');
+            if (lastSpaceIndex > 0) {
+              const materialName = trimmedLine.substring(0, lastSpaceIndex).trim();
+              const materialQuantity = parseInt(trimmedLine.substring(lastSpaceIndex + 1).trim()) || 0;
+              if (materialName && materialQuantity > 0) {
+                billOfMaterials.push({ name: materialName, quantity: materialQuantity });
+              }
+            }
+          }
+        }
+        
+        setParsedBillOfMaterials(billOfMaterials);
+      }
+    }
+  };
+
+  const handleJobDumpChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setJobDump(value);
+    parseJobDump(value);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,14 +93,10 @@ const JobForm: React.FC<JobFormProps> = ({ job, onSubmit, onCancel }) => {
     onSubmit({
       outputItem: formData.outputItem,
       outputQuantity: formData.outputQuantity,
-      jobStart: formData.jobStart || undefined,
-      jobEnd: formData.jobEnd || undefined,
-      saleStart: formData.saleStart || undefined,
-      saleEnd: formData.saleEnd || undefined,
       status: formData.status,
       projectedCost: formData.projectedCost,
       projectedRevenue: formData.projectedRevenue
-    });
+    }, parsedBillOfMaterials.length > 0 ? parsedBillOfMaterials : undefined);
   };
 
   const statusOptions = Object.values(IndJobStatusOptions);
@@ -124,64 +161,6 @@ const JobForm: React.FC<JobFormProps> = ({ job, onSubmit, onCancel }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="startDate" className="text-gray-300">Start Date & Time</Label>
-              <Input
-                id="startDate"
-                type="datetime-local"
-                value={formData.jobStart}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  jobStart: e.target.value
-                })}
-                className="bg-gray-800 border-gray-600 text-white"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="endDate" className="text-gray-300">End Date & Time</Label>
-              <Input
-                id="endDate"
-                type="datetime-local"
-                value={formData.jobEnd}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  jobEnd: e.target.value
-                })}
-                className="bg-gray-800 border-gray-600 text-white"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="saleStartDate" className="text-gray-300">Sale Start Date & Time</Label>
-              <Input
-                id="saleStartDate"
-                type="datetime-local"
-                value={formData.saleStart}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  saleStart: e.target.value
-                })}
-                className="bg-gray-800 border-gray-600 text-white"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="saleEndDate" className="text-gray-300">Sale End Date & Time</Label>
-              <Input
-                id="saleEndDate"
-                type="datetime-local"
-                value={formData.saleEnd}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  saleEnd: e.target.value
-                })}
-                className="bg-gray-800 border-gray-600 text-white"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
               <Label htmlFor="projectedCost" className="text-gray-300">Projected Cost</Label>
               <Input
                 id="projectedCost"
@@ -207,6 +186,23 @@ const JobForm: React.FC<JobFormProps> = ({ job, onSubmit, onCancel }) => {
                 className="bg-gray-800 border-gray-600 text-white"
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="jobDump" className="text-gray-300">Job Dump Import</Label>
+            <Textarea
+              id="jobDump"
+              value={jobDump}
+              onChange={handleJobDumpChange}
+              placeholder="Paste job dump here:&#10;&#10;Standup Light Guided Bomb 100&#10;285,224,182&#10;771,342,930&#10;&#10;Megacyte 37&#10;Zydrine 84&#10;..."
+              className="bg-gray-800 border-gray-600 text-white min-h-[120px]"
+              rows={6}
+            />
+            {parsedBillOfMaterials.length > 0 && (
+              <div className="text-sm text-gray-400">
+                <p>Parsed {parsedBillOfMaterials.length} materials from dump</p>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-2 pt-4">

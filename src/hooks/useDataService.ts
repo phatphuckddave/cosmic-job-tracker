@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { dataService } from '@/services/dataService';
 import { IndJob } from '@/lib/types';
 
@@ -6,17 +7,21 @@ export function useJobs() {
   const [jobs, setJobs] = useState<IndJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadingStatuses, setLoadingStatuses] = useState<Set<string>>(new Set());
+  const initialLoadComplete = useRef(false);
 
   useEffect(() => {
     let mounted = true;
 
-    const loadJobs = async (visibleStatuses?: string[]) => {
+    const loadJobs = async () => {
       try {
         setLoading(true);
-        const loadedJobs = await dataService.loadJobs(visibleStatuses);
+        // Load all jobs initially to get accurate totals
+        const loadedJobs = await dataService.loadJobs();
         if (mounted) {
           setJobs(loadedJobs);
           setError(null);
+          initialLoadComplete.current = true;
         }
       } catch (err) {
         if (mounted) {
@@ -62,22 +67,38 @@ export function useJobs() {
   const createMultipleBillItems = useCallback(dataService.createMultipleBillItems.bind(dataService), []);
 
   const loadJobsForStatuses = useCallback(async (visibleStatuses: string[]) => {
+    // Prevent multiple concurrent loads of the same status
+    const statusesToLoad = visibleStatuses.filter(status => !loadingStatuses.has(status));
+    if (statusesToLoad.length === 0) return;
+
+    // Mark statuses as loading
+    setLoadingStatuses(prev => {
+      const newSet = new Set(prev);
+      statusesToLoad.forEach(status => newSet.add(status));
+      return newSet;
+    });
+
     try {
-      setLoading(true);
+      // Load jobs for specific statuses without showing global loading
       const loadedJobs = await dataService.loadJobs(visibleStatuses);
-      setJobs(loadedJobs);
-      setError(null);
+      // Jobs will be updated via the subscription, no need to manually update state here
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load jobs');
     } finally {
-      setLoading(false);
+      // Remove statuses from loading set
+      setLoadingStatuses(prev => {
+        const newSet = new Set(prev);
+        statusesToLoad.forEach(status => newSet.delete(status));
+        return newSet;
+      });
     }
-  }, []);
+  }, [loadingStatuses]);
 
   return {
     jobs,
     loading,
     error,
+    loadingStatuses,
     createJob,
     updateJob,
     deleteJob,

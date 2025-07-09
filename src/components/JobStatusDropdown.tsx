@@ -20,10 +20,40 @@ const JobStatusDropdown: React.FC<JobStatusDropdownProps> = ({ job }) => {
 
   const handleStatusChange = async (newStatus: string, e: React.MouseEvent) => {
     try {
-      await updateJob(job.id, { status: newStatus });
+      const currentTime = new Date().toISOString();
+      const updates: { status: string; [key: string]: any } = { status: newStatus };
+
+      // Automatically assign dates based on status
+      switch (newStatus) {
+        case 'Running':
+          updates.jobStart = currentTime;
+          break;
+        case 'Done':
+          updates.jobEnd = currentTime;
+          break;
+        case 'Selling':
+          updates.saleStart = currentTime;
+          break;
+        case 'Closed':
+          updates.saleEnd = currentTime;
+          break;
+      }
+
+      await updateJob(job.id, updates);
+      
+      const dateMessages = [];
+      if (updates.jobStart) dateMessages.push('job start date set');
+      if (updates.jobEnd) dateMessages.push('job end date set');
+      if (updates.saleStart) dateMessages.push('sale start date set');
+      if (updates.saleEnd) dateMessages.push('sale end date set');
+      
+      const description = dateMessages.length > 0 
+        ? `Job status changed to ${newStatus} and ${dateMessages.join(', ')}`
+        : `Job status changed to ${newStatus}`;
+
       toast({
         title: "Status Updated",
-        description: `Job status changed to ${newStatus}`,
+        description,
         duration: 2000,
       });
     } catch (error) {
