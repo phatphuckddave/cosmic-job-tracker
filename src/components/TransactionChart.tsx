@@ -180,7 +180,7 @@ const TransactionChart: React.FC<TransactionChartProps> = ({
   };
 
   const renderChart = () => {
-    if (type === 'overview' || type === 'total-revenue' || type === 'total-profit') {
+    if (type === 'total-revenue') {
       return (
         <AreaChart data={data} margin={{ top: 20, right: 80, left: 80, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -192,28 +192,102 @@ const TransactionChart: React.FC<TransactionChartProps> = ({
             contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151' }}
           />
           <Legend />
-          {(type === 'overview' || type === 'total-revenue') && (
-            <Area
-              type="monotone"
-              dataKey="revenue"
-              stackId="1"
-              stroke="#10B981"
-              fill="#10B981"
-              fillOpacity={0.6}
-              name="Revenue"
-            />
-          )}
-          {(type === 'overview' || type === 'total-profit') && (
-            <Area
-              type="monotone"
-              dataKey="profit"
-              stackId="2"
-              stroke="#3B82F6"
-              fill="#3B82F6"
-              fillOpacity={0.6}
-              name="Profit"
-            />
-          )}
+          <Area
+            type="monotone"
+            dataKey="cumulativeRevenue"
+            stroke="#10B981"
+            fill="#10B981"
+            fillOpacity={0.3}
+            name="Cumulative Revenue"
+          />
+          <Line
+            type="monotone"
+            dataKey="revenue"
+            stroke="#059669"
+            strokeWidth={2}
+            name="Revenue per Day"
+            dot={false}
+          />
+        </AreaChart>
+      );
+    }
+
+    if (type === 'total-profit') {
+      return (
+        <AreaChart data={data} margin={{ top: 20, right: 80, left: 80, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+          <XAxis dataKey="formattedDate" stroke="#9CA3AF" />
+          <YAxis stroke="#9CA3AF" tickFormatter={formatTooltipValue} width={70} />
+          <Tooltip 
+            formatter={formatTooltipValue}
+            labelStyle={{ color: '#F3F4F6' }}
+            contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151' }}
+          />
+          <Legend />
+          <Area
+            type="monotone"
+            dataKey="cumulativeProfit"
+            stroke="#3B82F6"
+            fill="#3B82F6"
+            fillOpacity={0.3}
+            name="Cumulative Profit"
+          />
+          <Line
+            type="monotone"
+            dataKey="profit"
+            stroke="#1E40AF"
+            strokeWidth={2}
+            name="Profit per Day"
+            dot={false}
+          />
+        </AreaChart>
+      );
+    }
+
+    if (type === 'overview') {
+      return (
+        <AreaChart data={data} margin={{ top: 20, right: 80, left: 80, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+          <XAxis dataKey="formattedDate" stroke="#9CA3AF" />
+          <YAxis stroke="#9CA3AF" tickFormatter={formatTooltipValue} width={70} />
+          <Tooltip 
+            formatter={formatTooltipValue}
+            labelStyle={{ color: '#F3F4F6' }}
+            contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151' }}
+          />
+          <Legend />
+          <Area
+            type="monotone"
+            dataKey="cumulativeRevenue"
+            stroke="#10B981"
+            fill="#10B981"
+            fillOpacity={0.3}
+            name="Cumulative Revenue"
+          />
+          <Area
+            type="monotone"
+            dataKey="cumulativeProfit"
+            stroke="#3B82F6"
+            fill="#3B82F6"
+            fillOpacity={0.3}
+            name="Cumulative Profit"
+          />
+          <Line
+            type="monotone"
+            dataKey="revenue"
+            stroke="#059669"
+            strokeWidth={2}
+            name="Revenue per Day"
+            dot={false}
+          />
+          <Line
+            type="monotone"
+            dataKey="profit"
+            stroke="#1E40AF"
+            strokeWidth={2}
+            name="Profit per Day"
+            dot={false}
+          />
         </AreaChart>
       );
     }
