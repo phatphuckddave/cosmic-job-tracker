@@ -356,44 +356,37 @@ const TransactionChart: React.FC<TransactionChartProps> = ({
       );
     }
 
-    // Profit chart - entire job view
-    return (
-      <AreaChart data={data} margin={{ top: 20, right: 80, left: 80, bottom: 5 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-        <XAxis dataKey="formattedDate" stroke="#9CA3AF" />
-        <YAxis stroke="#9CA3AF" tickFormatter={formatTooltipValue} width={70} />
-        <Tooltip 
-          formatter={formatTooltipValue}
-          labelStyle={{ color: '#F3F4F6' }}
-          contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151' }}
-        />
-        <Legend />
-        <Area
-          type="monotone"
-          dataKey="cumulativeCosts"
-          stroke="#EF4444"
-          fill="#EF4444"
-          fillOpacity={0.3}
-          name="Cumulative Costs"
-        />
-        <Area
-          type="monotone"
-          dataKey="cumulativeRevenue"
-          stroke="#10B981"
-          fill="#10B981"
-          fillOpacity={0.3}
-          name="Cumulative Revenue"
-        />
-        <Line
-          type="monotone"
-          dataKey="profit"
-          stroke="#3B82F6"
-          strokeWidth={2}
-          name="Profit per Day"
-          dot={false}
-        />
-      </AreaChart>
-    );
+    if (type === 'profit') {
+      return (
+        <AreaChart data={data} margin={{ top: 20, right: 80, left: 80, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+          <XAxis dataKey="formattedDate" stroke="#9CA3AF" />
+          <YAxis stroke="#9CA3AF" tickFormatter={formatTooltipValue} width={70} />
+          <Tooltip 
+            formatter={formatTooltipValue}
+            labelStyle={{ color: '#F3F4F6' }}
+            contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151' }}
+          />
+          <Legend />
+          <Area
+            type="monotone"
+            dataKey="cumulativeProfit"
+            stroke="#3B82F6"
+            fill="#3B82F6"
+            fillOpacity={0.3}
+            name="Cumulative Profit"
+          />
+          <Line
+            type="monotone"
+            dataKey="profit"
+            stroke="#1E40AF"
+            strokeWidth={2}
+            name="Profit per Day"
+            dot={false}
+          />
+        </AreaChart>
+      );
+    }
   };
 
   return (
