@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { BarChart3 } from 'lucide-react';
 import JobTransactionPopover from './JobTransactionPopover';
 import TransactionChart from './TransactionChart';
+import { useJobCardMetrics } from '@/hooks/useJobCardMetrics';
 
 interface JobCardMetricsProps {
   job: IndJob;
@@ -19,31 +20,19 @@ const JobCardMetrics: React.FC<JobCardMetricsProps> = ({ job }) => {
   const { updateJob } = useJobs();
   const { toast } = useToast();
 
-  const sortedExpenditures = [...job.expenditures].sort((a, b) =>
-    new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
-  const sortedIncome = [...job.income].sort((a, b) =>
-    new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
-
-  const totalExpenditure = sortedExpenditures.reduce((sum, tx) => sum + tx.totalPrice, 0);
-  const totalIncome = sortedIncome.reduce((sum, tx) => sum + tx.totalPrice, 0);
-  const profit = totalIncome - totalExpenditure;
-  const margin = totalIncome > 0 ? ((profit / totalIncome) * 100) : 0;
-
-  // Calculate performance metrics - Simple price per unit comparison
-  const itemsSold = sortedIncome.reduce((sum, tx) => sum + tx.quantity, 0);
-  const produced = job.produced || 0;
-
-  // Only show performance if we have produced items and sold items
-  const showPerformanceIndicator = produced > 0 && itemsSold > 0 && job.projectedRevenue > 0;
-
-  let performancePercentage = 0;
-  if (showPerformanceIndicator) {
-    const expectedPPU = job.projectedRevenue / produced;
-    const actualPPU = totalIncome / itemsSold;
-    performancePercentage = (actualPPU / expectedPPU) * 100;
-  }
+  // Use optimized hook for all expensive calculations
+  const {
+    sortedExpenditures,
+    sortedIncome,
+    totalExpenditure,
+    totalIncome,
+    profit,
+    margin,
+    itemsSold,
+    produced,
+    showPerformanceIndicator,
+    performancePercentage
+  } = useJobCardMetrics(job);
 
   const handleFieldClick = (fieldName: string, currentValue: number, e: React.MouseEvent) => {
     e.stopPropagation();

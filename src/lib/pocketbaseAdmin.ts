@@ -1,3 +1,3 @@
-// Temporary admin credentials - in production, these should be environment variables
-export const POCKETBASE_SUPERUSER_EMAIL = 'admin@example.com';
-export const POCKETBASE_SUPERUSER_PASSWORD = 'admin123';
+const POCKETBASE_SUPERUSER_EMAIL = 'david.majdandzic@hotmail.com';
+const POCKETBASE_SUPERUSER_PASSWORD = 'YxrqmIHYanGy8l';
+export { POCKETBASE_SUPERUSER_EMAIL, POCKETBASE_SUPERUSER_PASSWORD };

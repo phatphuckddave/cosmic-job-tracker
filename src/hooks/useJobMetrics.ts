@@ -1,32 +1,44 @@
 
+import { useMemo } from 'react';
 import { IndJob } from '@/lib/types';
 
 export const useJobMetrics = (jobs: IndJob[]) => {
-  const calculateJobRevenue = (job: IndJob) =>
-    job.income.reduce((sum, tx) => sum + tx.totalPrice, 0);
+  // Memoize individual job calculations to avoid recalculating on every render
+  const calculateJobRevenue = useMemo(() => (job: IndJob) => {
+    return job.income.reduce((sum, tx) => sum + tx.totalPrice, 0);
+  }, []);
 
-  const calculateJobProfit = (job: IndJob) => {
+  const calculateJobProfit = useMemo(() => (job: IndJob) => {
     const expenditure = job.expenditures.reduce((sum, tx) => sum + tx.totalPrice, 0);
     const income = job.income.reduce((sum, tx) => sum + tx.totalPrice, 0);
     return income - expenditure;
-  };
+  }, []);
 
-  const totalJobs = jobs.length;
+  // Memoize expensive aggregation calculations - only recalculate when jobs actually change
+  const metrics = useMemo(() => {
+    const totalJobs = jobs.length;
+    
+    // Single pass through jobs to calculate both revenue and profit
+    let totalRevenue = 0;
+    let totalProfit = 0;
+    
+    for (const job of jobs) {
+      const expenditure = job.expenditures.reduce((sum, tx) => sum + tx.totalPrice, 0);
+      const income = job.income.reduce((sum, tx) => sum + tx.totalPrice, 0);
+      
+      totalRevenue += income;
+      totalProfit += (income - expenditure);
+    }
 
-  const totalProfit = jobs.reduce((sum, job) => {
-    const expenditure = job.expenditures.reduce((sum, tx) => sum + tx.totalPrice, 0);
-    const income = job.income.reduce((sum, tx) => sum + tx.totalPrice, 0);
-    return sum + (income - expenditure);
-  }, 0);
-
-  const totalRevenue = jobs.reduce((sum, job) =>
-    sum + job.income.reduce((sum, tx) => sum + tx.totalPrice, 0), 0
-  );
+    return {
+      totalJobs,
+      totalRevenue,
+      totalProfit
+    };
+  }, [jobs]);
 
   return {
-    totalJobs,
-    totalProfit,
-    totalRevenue,
+    ...metrics,
     calculateJobRevenue,
     calculateJobProfit
   };

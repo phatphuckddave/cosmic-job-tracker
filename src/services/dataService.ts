@@ -35,8 +35,17 @@ export class DataService {
   }
 
   private notifyListeners() {
-    this.listeners.forEach(listener => listener());
+    // Debounce notifications to prevent excessive re-renders
+    if (this.notificationTimeout) {
+      clearTimeout(this.notificationTimeout);
+    }
+    this.notificationTimeout = setTimeout(() => {
+      this.listeners.forEach(listener => listener());
+      this.notificationTimeout = null;
+    }, 10);
   }
+
+  private notificationTimeout: NodeJS.Timeout | null = null;
 
   getJobs(): IndJob[] {
     return [...this.jobs];
@@ -105,16 +114,42 @@ export class DataService {
 
   async updateJob(id: string, updates: Partial<IndJobRecord>): Promise<IndJob> {
     console.log('Updating job:', id, updates);
-    const updatedRecord = await jobService.updateJob(id, updates);
-
+    
     const jobIndex = this.jobs.findIndex(job => job.id === id);
-    if (jobIndex !== -1) {
-      this.jobs[jobIndex] = updatedRecord;
-      this.notifyListeners();
-      return this.jobs[jobIndex];
+    if (jobIndex === -1) {
+      throw new Error(`Job with id ${id} not found in local state`);
     }
 
-    throw new Error(`Job with id ${id} not found in local state`);
+    // Optimistic update - immediately update local state (only for simple properties)
+    const originalJob = { ...this.jobs[jobIndex] };
+    
+    // Only apply optimistic updates for safe properties (not complex relations)
+    const safeUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([key]) => 
+        !['billOfMaterials', 'consumedMaterials', 'expenditures', 'income'].includes(key)
+      )
+    );
+    
+    if (Object.keys(safeUpdates).length > 0) {
+      this.jobs[jobIndex] = { ...this.jobs[jobIndex], ...safeUpdates };
+      this.notifyListeners();
+    }
+
+    try {
+      // Update in database
+      const updatedRecord = await jobService.updateJob(id, updates);
+      
+      // Replace with server response
+      this.jobs[jobIndex] = updatedRecord;
+      this.notifyListeners();
+      
+      return this.jobs[jobIndex];
+    } catch (error) {
+      // Revert optimistic update on error
+      this.jobs[jobIndex] = originalJob;
+      this.notifyListeners();
+      throw error;
+    }
   }
 
   async deleteJob(id: string): Promise<void> {
@@ -163,36 +198,43 @@ export class DataService {
     const job = this.getJob(jobId);
     if (!job) throw new Error(`Job with id ${jobId} not found`);
 
-    const createdTransactions: IndTransactionRecord[] = [];
-
-    // Create all transactions
-    for (const transaction of transactions) {
-      transaction.job = jobId;
-      const createdTransaction = await transactionService.createTransaction(job, transaction);
-      createdTransactions.push(createdTransaction);
-    }
-
-    // Update the job's transaction references in one database call
-    const field = type === 'expenditure' ? 'expenditures' : 'income';
-    const currentIds = (job[field] || []).map(tr => tr.id);
-    const newIds = createdTransactions.map(tr => tr.id);
-    await jobService.updateJob(jobId, {
-      [field]: [...currentIds, ...newIds]
-    });
-
-    // Fetch fresh job data from the server
-    const updatedJob = await jobService.getJob(jobId);
-    if (!updatedJob) throw new Error(`Job with id ${jobId} not found after update`);
-
-    // Update local state with fresh data
+    // Optimistically update local state first for better UX
     const jobIndex = this.jobs.findIndex(j => j.id === jobId);
-    if (jobIndex !== -1) {
+    if (jobIndex === -1) throw new Error(`Job with id ${jobId} not found`);
+    
+    const originalJob = { ...this.jobs[jobIndex] };
+    
+    try {
+      // Create all transactions in parallel for better performance
+      const transactionPromises = transactions.map(transaction => {
+        transaction.job = jobId;
+        return transactionService.createTransaction(job, transaction);
+      });
+      
+      const createdTransactions = await Promise.all(transactionPromises);
+
+      // Update the job's transaction references in one database call
+      const field = type === 'expenditure' ? 'expenditures' : 'income';
+      const currentIds = (job[field] || []).map(tr => tr.id);
+      const newIds = createdTransactions.map(tr => tr.id);
+      await jobService.updateJob(jobId, {
+        [field]: [...currentIds, ...newIds]
+      });
+
+      // Fetch fresh job data from the server
+      const updatedJob = await jobService.getJob(jobId);
+      if (!updatedJob) throw new Error(`Job with id ${jobId} not found after update`);
+
+      // Update local state with fresh data
       this.jobs[jobIndex] = updatedJob;
       this.notifyListeners();
       return this.jobs[jobIndex];
+    } catch (error) {
+      // Revert optimistic update on error
+      this.jobs[jobIndex] = originalJob;
+      this.notifyListeners();
+      throw error;
     }
-
-    throw new Error(`Job with id ${jobId} not found in local state`);
   }
 
   async updateTransaction(jobId: string, transactionId: string, updates: Partial<IndTransactionRecord>): Promise<IndJob> {

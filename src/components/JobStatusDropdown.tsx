@@ -1,4 +1,5 @@
 
+import { useState, useRef } from 'react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,8 +18,25 @@ interface JobStatusDropdownProps {
 const JobStatusDropdown: React.FC<JobStatusDropdownProps> = ({ job }) => {
   const { updateJob } = useJobs();
   const { toast } = useToast();
+  const [isUpdating, setIsUpdating] = useState(false);
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleStatusChange = async (newStatus: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    // Prevent duplicate calls
+    if (isUpdating || job.status === newStatus) {
+      return;
+    }
+
+    // Clear any pending timeout
+    if (updateTimeoutRef.current) {
+      clearTimeout(updateTimeoutRef.current);
+    }
+
+    setIsUpdating(true);
+
     try {
       const currentTime = new Date().toISOString();
       const updates: { status: string; [key: string]: any } = { status: newStatus };
@@ -64,6 +82,11 @@ const JobStatusDropdown: React.FC<JobStatusDropdownProps> = ({ job }) => {
         variant: "destructive",
         duration: 2000,
       });
+    } finally {
+      // Reset updating state after a short delay
+      updateTimeoutRef.current = setTimeout(() => {
+        setIsUpdating(false);
+      }, 500);
     }
   };
 

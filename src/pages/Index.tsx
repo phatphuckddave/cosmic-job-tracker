@@ -10,7 +10,7 @@ import JobsSection from '@/components/JobsSection';
 import { useDashboard } from '@/hooks/useDashboard';
 import { useDashboardHandlers } from '@/hooks/useDashboardHandlers';
 import { useJobMetrics } from '@/hooks/useJobMetrics';
-import { categorizeJobs } from '@/utils/jobFiltering';
+import { useCategorizedJobs } from '@/hooks/useCategorizedJobs';
 
 const Index = () => {
   const {
@@ -69,6 +69,10 @@ const Index = () => {
     loadingStatuses
   });
 
+  // Always call hooks before any conditional returns
+  const { regularJobs, trackedJobs } = useCategorizedJobs(jobs, searchQuery);
+  const { totalJobs, totalProfit, totalRevenue, calculateJobRevenue, calculateJobProfit } = useJobMetrics(regularJobs);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-950 p-6 flex items-center justify-center">
@@ -84,9 +88,6 @@ const Index = () => {
       </div>
     );
   }
-
-  const { regularJobs, trackedJobs } = categorizeJobs(jobs, searchQuery);
-  const { totalJobs, totalProfit, totalRevenue, calculateJobRevenue, calculateJobProfit } = useJobMetrics(regularJobs);
 
   if (showJobForm) {
     return (
