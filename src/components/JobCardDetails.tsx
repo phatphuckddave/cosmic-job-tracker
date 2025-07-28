@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Calendar, Factory, Clock, Copy, DollarSign } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -6,6 +7,7 @@ import { useJobs } from '@/hooks/useDataService';
 import { useToast } from '@/hooks/use-toast';
 import { useClipboard } from '@/hooks/useClipboard';
 import { formatISK } from '@/utils/priceUtils';
+import { formatDuration, calculateRemainingTime } from '@/utils/timeUtils';
 
 interface JobCardDetailsProps {
   job: IndJob;
@@ -14,10 +16,25 @@ interface JobCardDetailsProps {
 const JobCardDetails: React.FC<JobCardDetailsProps> = ({ job }) => {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [tempValues, setTempValues] = useState<{ [key: string]: string }>({});
+  const [remainingTime, setRemainingTime] = useState<number>(0);
   const { updateJob } = useJobs();
   const { toast } = useToast();
 
   const { copying, copyToClipboard } = useClipboard();
+
+  // Update remaining time for running jobs
+  useEffect(() => {
+    if (job.status === 'Running' && job.jobStart && job.runtime) {
+      const updateRemainingTime = () => {
+        const remaining = calculateRemainingTime(job.jobStart, job.runtime);
+        setRemainingTime(remaining);
+      };
+
+      updateRemainingTime();
+      const interval = setInterval(updateRemainingTime, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [job.status, job.jobStart, job.runtime]);
 
   const formatDateTime = (dateString: string | null | undefined) => {
     if (!dateString) return 'Not set';
@@ -30,18 +47,6 @@ const JobCardDetails: React.FC<JobCardDetailsProps> = ({ job }) => {
     }).replace(',', '');
   };
 
-  const roundToSignificantDigits = (num: number, digits: number = 4): number => {
-    if (num === 0) return 0;
-    const magnitude = Math.floor(Math.log10(Math.abs(num)));
-    const factor = Math.pow(10, digits - 1 - magnitude);
-    return Math.round(num * factor) / factor;
-  };
-
-  const handleFieldClick = (fieldName: string, currentValue: string | null, e: React.MouseEvent) => {
-    setEditingField(fieldName);
-    setTempValues({ ...tempValues, [fieldName]: currentValue || '' });
-  };
-
   const handleJobIdClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     await copyToClipboard(job.id, 'id', 'Job ID copied to clipboard');
@@ -49,9 +54,16 @@ const JobCardDetails: React.FC<JobCardDetailsProps> = ({ job }) => {
 
   const handleFieldUpdate = async (fieldName: string, value: string) => {
     try {
-      const dateValue = value ? new Date(value).toISOString() : null;
-      await updateJob(job.id, { [fieldName]: dateValue });
+      let updateValue: any;
+      if (fieldName === 'parallel') {
+        updateValue = Math.max(1, parseInt(value) || 1);
+      } else {
+        updateValue = value ? new Date(value).toISOString() : null;
+      }
+      
+      await updateJob(job.id, { [fieldName]: updateValue });
       setEditingField(null);
+      setTempValues({});
       toast({
         title: "Updated",
         description: `${fieldName} updated successfully`,
@@ -183,6 +195,62 @@ const JobCardDetails: React.FC<JobCardDetailsProps> = ({ job }) => {
           fieldName="saleEnd"
           icon={<Calendar className="w-4 h-4" />}
         />
+
+        {job.runtime && job.runtime > 0 && (
+          <>
+            <div className="flex items-center gap-2 text-sm text-gray-400">
+              <Clock className="w-4 h-4" />
+              <span>Runtime:</span>
+            </div>
+            <div className="text-sm text-white flex items-center gap-1">
+              {formatDuration(job.runtime / (job.parallel || 1))}
+              <span className="text-gray-400">(</span>
+              {editingField === 'parallel' ? (
+                <Input
+                  type="number"
+                  min="1"
+                  value={tempValues.parallel || job.parallel?.toString() || '1'}
+                  onChange={(e) => setTempValues({ ...tempValues, parallel: e.target.value })}
+                  onBlur={() => handleFieldUpdate('parallel', tempValues.parallel || '1')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleFieldUpdate('parallel', tempValues.parallel || '1');
+                    } else if (e.key === 'Escape') {
+                      setEditingField(null);
+                      setTempValues({});
+                    }
+                  }}
+                  className="w-12 h-5 px-1 py-0 text-xs bg-gray-800 border-gray-600"
+                  autoFocus
+                />
+              ) : (
+                <span 
+                  className="cursor-pointer hover:text-blue-400 transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingField('parallel');
+                    setTempValues({ parallel: job.parallel?.toString() || '1' });
+                  }}
+                >
+                  {job.parallel || 1}
+                </span>
+              )}
+              <span className="text-gray-400">)</span>
+            </div>
+
+            {job.status === 'Running' && (
+              <>
+                <div className="flex items-center gap-2 text-sm text-gray-400">
+                  <Clock className="w-4 h-4" />
+                  <span>Remaining:</span>
+                </div>
+                <div className="text-sm text-green-400">
+                  {formatDuration(remainingTime)}
+                </div>
+              </>
+            )}
+          </>
+        )}
       </div>
 
       {job.projectedRevenue > 0 && job.produced > 0 && (
@@ -321,7 +389,7 @@ const PriceDisplay: React.FC<PriceDisplayProps> = ({ job }) => {
         <DollarSign className="w-4 h-4" />
         <span>Adjusted Break-even{taxSuffix}:</span>
       </div>
-      
+
       <div className="flex items-center gap-1 text-lg justify-center">
         <span
           className="cursor-pointer hover:text-blue-400 transition-colors inline-flex items-center gap-1 text-white"

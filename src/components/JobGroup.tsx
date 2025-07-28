@@ -1,6 +1,7 @@
 
 import { IndJob } from '@/lib/types';
 import { getStatusColor } from '@/utils/jobStatusUtils';
+import { jobNeedsAttention, getAttentionGlowClasses } from '@/utils/jobAttentionUtils';
 import JobCard from './JobCard';
 import { Loader2 } from 'lucide-react';
 
@@ -29,10 +30,13 @@ const JobGroup: React.FC<JobGroupProps> = ({
   isTracked = false,
   isLoading = false
 }) => {
+  // Check if any jobs in this group need attention
+  const hasAttentionJobs = jobs.some(job => jobNeedsAttention(job));
+
   return (
     <div className="space-y-4">
       <div
-        className={`${getStatusColor(status)} rounded-lg cursor-pointer select-none transition-colors hover:opacity-90`}
+        className={`${getStatusColor(status)} rounded-lg cursor-pointer select-none transition-colors hover:opacity-90 ${hasAttentionJobs ? getAttentionGlowClasses() : ''}`}
         onClick={() => onToggle(status)}
       >
         <div className="flex items-center justify-between p-4">

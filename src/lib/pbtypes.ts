@@ -12,7 +12,7 @@ export enum Collections {
 	Otps = "_otps",
 	Superusers = "_superusers",
 	IndBillitem = "ind_billItem",
-	IndFacility = "ind_facility",
+	IndChar = "ind_char",
 	IndJob = "ind_job",
 	IndTransaction = "ind_transaction",
 	Regionview = "regionview",
@@ -107,10 +107,9 @@ export type IndBillitemRecord = {
 }
 export type IndBillitemRecordNoId = Omit<IndBillitemRecord, 'id' | 'created' | 'updated'>
 
-export type IndFacilityRecord = {
+export type IndCharRecord = {
 	created?: IsoDateString
 	id: string
-	location: string
 	name: string
 	updated?: IsoDateString
 }
@@ -123,9 +122,15 @@ export enum IndJobStatusOptions {
 	"Selling" = "Selling",
 	"Closed" = "Closed",
 	"Tracked" = "Tracked",
+	"Staging" = "Staging",
+	"Inbound" = "Inbound",
+	"Outbound" = "Outbound",
+	"Delivered" = "Delivered",
+	"Queued" = "Queued",
 }
 export type IndJobRecord = {
 	billOfMaterials?: RecordIdString[]
+	character?: RecordIdString
 	consumedMaterials?: RecordIdString[]
 	created?: IsoDateString
 	expenditures?: RecordIdString[]
@@ -135,9 +140,11 @@ export type IndJobRecord = {
 	jobStart?: IsoDateString
 	outputItem: string
 	outputQuantity: number
+	parallel?: number
 	produced?: number
 	projectedCost?: number
 	projectedRevenue?: number
+	runtime?: number
 	saleEnd?: IsoDateString
 	saleStart?: IsoDateString
 	status: IndJobStatusOptions
@@ -222,7 +229,7 @@ export type MfasResponse<Texpand = unknown> = Required<MfasRecord> & BaseSystemF
 export type OtpsResponse<Texpand = unknown> = Required<OtpsRecord> & BaseSystemFields<Texpand>
 export type SuperusersResponse<Texpand = unknown> = Required<SuperusersRecord> & AuthSystemFields<Texpand>
 export type IndBillitemResponse<Texpand = unknown> = Required<IndBillitemRecord> & BaseSystemFields<Texpand>
-export type IndFacilityResponse<Texpand = unknown> = Required<IndFacilityRecord> & BaseSystemFields<Texpand>
+export type IndCharResponse<Texpand = unknown> = Required<IndCharRecord> & BaseSystemFields<Texpand>
 export type IndJobResponse<Texpand = unknown> = Required<IndJobRecord> & BaseSystemFields<Texpand>
 export type IndTransactionResponse<Texpand = unknown> = Required<IndTransactionRecord> & BaseSystemFields<Texpand>
 export type RegionviewResponse<Texpand = unknown> = Required<RegionviewRecord> & BaseSystemFields<Texpand>
@@ -240,7 +247,7 @@ export type CollectionRecords = {
 	_otps: OtpsRecord
 	_superusers: SuperusersRecord
 	ind_billItem: IndBillitemRecord
-	ind_facility: IndFacilityRecord
+	ind_char: IndCharRecord
 	ind_job: IndJobRecord
 	ind_transaction: IndTransactionRecord
 	regionview: RegionviewRecord
@@ -257,7 +264,7 @@ export type CollectionResponses = {
 	_otps: OtpsResponse
 	_superusers: SuperusersResponse
 	ind_billItem: IndBillitemResponse
-	ind_facility: IndFacilityResponse
+	ind_char: IndCharResponse
 	ind_job: IndJobResponse
 	ind_transaction: IndTransactionResponse
 	regionview: RegionviewResponse
@@ -277,7 +284,7 @@ export type TypedPocketBase = PocketBase & {
 	collection(idOrName: '_otps'): RecordService<OtpsResponse>
 	collection(idOrName: '_superusers'): RecordService<SuperusersResponse>
 	collection(idOrName: 'ind_billItem'): RecordService<IndBillitemResponse>
-	collection(idOrName: 'ind_facility'): RecordService<IndFacilityResponse>
+	collection(idOrName: 'ind_char'): RecordService<IndCharResponse>
 	collection(idOrName: 'ind_job'): RecordService<IndJobResponse>
 	collection(idOrName: 'ind_transaction'): RecordService<IndTransactionResponse>
 	collection(idOrName: 'regionview'): RecordService<RegionviewResponse>

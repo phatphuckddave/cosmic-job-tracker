@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { IndJob } from '@/lib/types';
 import { getStatusBackgroundColor } from '@/utils/jobStatusUtils';
+import { jobNeedsAttention, getAttentionGlowClasses } from '@/utils/jobAttentionUtils';
 import JobCardHeader from './JobCardHeader';
 import JobCardDetails from './JobCardDetails';
 import JobCardMetrics from './JobCardMetrics';
@@ -25,6 +26,7 @@ const JobCard: React.FC<JobCardProps> = ({
   isTracked = false
 }) => {
   const navigate = useNavigate();
+  const needsAttention = jobNeedsAttention(job);
 
   const handleCardClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -39,7 +41,7 @@ const JobCard: React.FC<JobCardProps> = ({
 
   return (
     <Card
-      className={`bg-gray-900 border-gray-700 text-white h-full flex flex-col cursor-pointer hover:bg-gray-800/50 transition-colors ${job.status === 'Tracked' ? 'border-l-4 border-l-cyan-600' : ''} ${getStatusBackgroundColor(job.status)}`}
+      className={`bg-gray-900 border-gray-700 text-white h-full flex flex-col cursor-pointer hover:bg-gray-800/50 transition-colors ${job.status === 'Tracked' ? 'border-l-4 border-l-cyan-600' : ''} ${getStatusBackgroundColor(job.status)} ${needsAttention ? getAttentionGlowClasses() : ''}`}
       onClick={handleCardClick}
     >
       <CardHeader className="flex-shrink-0">

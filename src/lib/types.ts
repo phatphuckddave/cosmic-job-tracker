@@ -14,6 +14,7 @@ export type IndJob = {
 	jobStart?: IsoDateString
 	outputItem: string
 	outputQuantity: number
+	parallel?: number
 	produced?: number
 	saleEnd?: IsoDateString
 	saleStart?: IsoDateString
@@ -21,6 +22,7 @@ export type IndJob = {
 	updated?: IsoDateString
 	projectedCost?: number
 	projectedRevenue?: number
+	runtime?: number
 }
 
 export type IndTransaction = IndTransactionRecord;

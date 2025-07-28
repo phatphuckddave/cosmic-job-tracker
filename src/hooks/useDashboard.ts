@@ -33,6 +33,7 @@ export function useDashboard() {
 
   const scrollPositionRef = useRef<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const attentionStatusesLoaded = useRef(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -54,6 +55,15 @@ export function useDashboard() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Load attention-relevant statuses after initial load
+  useEffect(() => {
+    if (!loading && !attentionStatusesLoaded.current) {
+      const attentionStatuses = ['Acquisition', 'Running', 'Selling'];
+      loadJobsForStatuses(attentionStatuses);
+      attentionStatusesLoaded.current = true;
+    }
+  }, [loading, loadJobsForStatuses]);
 
   return {
     // State

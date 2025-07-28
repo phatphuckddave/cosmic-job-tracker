@@ -61,9 +61,15 @@ const BatchExpenditureForm: React.FC<BatchExpenditureFormProps> = ({ onClose, on
 
           {transactionGroups.length > 0 && (
             <div className="space-y-4">
-              <ExpenditureStats 
+              <ExpenditureStats
                 totalExpenditures={transactionGroups.length}
                 duplicatesFound={duplicatesFound}
+              />
+
+              <ExpenditureActions
+                onCancel={onClose}
+                onSubmit={handleSubmit}
+                canSubmit={canSubmit}
               />
 
               <ExpenditureTable
@@ -71,12 +77,6 @@ const BatchExpenditureForm: React.FC<BatchExpenditureFormProps> = ({ onClose, on
                 jobs={jobs}
                 eligibleJobs={eligibleJobs}
                 onAssignJob={handleAssignJob}
-              />
-
-              <ExpenditureActions
-                onCancel={onClose}
-                onSubmit={handleSubmit}
-                canSubmit={canSubmit}
               />
             </div>
           )}

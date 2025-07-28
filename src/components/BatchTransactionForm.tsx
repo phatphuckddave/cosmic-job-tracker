@@ -43,9 +43,9 @@ const BatchTransactionForm: React.FC<BatchTransactionFormProps> = ({ onClose, on
         onClick={(e) => e.stopPropagation()}
       >
         <BatchTransactionHeader onClose={onClose} />
-        
+
         <CardContent className="space-y-4">
-          <PasteTransactionInput 
+          <PasteTransactionInput
             pastedData={pastedData}
             onPaste={handlePaste}
           />
@@ -53,23 +53,23 @@ const BatchTransactionForm: React.FC<BatchTransactionFormProps> = ({ onClose, on
           {transactionGroups.length > 0 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <TransactionStats 
+                <TransactionStats
                   transactionCount={transactionGroups.length}
                   duplicatesFound={duplicatesFound}
                 />
               </div>
+
+              <TransactionActions
+                onCancel={onClose}
+                onSubmit={handleSubmit}
+                canSubmit={canSubmit}
+              />
 
               <TransactionTable
                 transactionGroups={transactionGroups}
                 jobs={jobs}
                 eligibleJobs={eligibleJobs}
                 onAssignJob={handleAssignJob}
-              />
-
-              <TransactionActions
-                onCancel={onClose}
-                onSubmit={handleSubmit}
-                canSubmit={canSubmit}
               />
             </div>
           )}

@@ -5,7 +5,7 @@ import { IndJob } from '@/lib/types';
 import { useClipboard } from '@/hooks/useClipboard';
 import { useJobs } from '@/hooks/useDataService';
 import { useState } from 'react';
-import JobStatusDropdown from './JobStatusDropdown';
+import JobStatusNavigation from './JobStatusNavigation';
 import BOMActions from './BOMActions';
 import EditableProduced from './EditableProduced';
 import TransactionChart from './TransactionChart';
@@ -41,67 +41,72 @@ const JobCardHeader: React.FC<JobCardHeaderProps> = ({
   };
 
   return (
-    <div className="flex justify-between items-start">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-2">
-          <CardTitle
-            className="text-blue-400 truncate cursor-pointer hover:text-blue-300 transition-colors flex items-center gap-1 leading-normal"
-            onClick={handleJobNameClick}
-            title="Click to copy job name"
-            data-no-navigate
-            style={{ lineHeight: '1.4' }}
-          >
-            {job.outputItem}
-            {copying === 'name' && <Copy className="w-4 h-4 text-green-400" />}
-          </CardTitle>
+    <>
+      <div className="flex justify-between items-start">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-2">
+            <CardTitle
+              className="text-blue-400 truncate cursor-pointer hover:text-blue-300 transition-colors flex items-center gap-1 leading-normal"
+              onClick={handleJobNameClick}
+              title="Click to copy job name"
+              data-no-navigate
+              style={{ lineHeight: '1.4' }}
+            >
+              {job.outputItem}
+              {copying === 'name' && <Copy className="w-4 h-4 text-green-400" />}
+            </CardTitle>
+          </div>
+          <div className="text-gray-400 text-sm leading-relaxed" style={{ lineHeight: '1.4' }}>
+            <div className="mb-1">
+              Runs: {job.outputQuantity.toLocaleString()}
+              <span className="ml-4">
+                Produced: <EditableProduced job={job} onUpdateProduced={onUpdateProduced} />
+              </span>
+              <span className="ml-4 items-center gap-1">
+                Sold: <span className="text-green-400">{itemsSold.toLocaleString()}</span>
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="text-gray-400 text-sm leading-relaxed" style={{ lineHeight: '1.4' }}>
-          <div className="mb-1">
-            Runs: {job.outputQuantity.toLocaleString()}
-            <span className="ml-4">
-              Produced: <EditableProduced job={job} onUpdateProduced={onUpdateProduced} />
-            </span>
-            <span className="ml-4 items-center gap-1">
-              Sold: <span className="text-green-400">{itemsSold.toLocaleString()}</span>
-            </span>
+        <div className="flex flex-col gap-2 flex-shrink-0 items-end">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onEdit(job)}
+              className="border-gray-600 hover:bg-gray-800"
+              data-no-navigate
+            >
+              Edit
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => onDelete(job.id)}
+              data-no-navigate
+            >
+              Delete
+            </Button>
+          </div>
+          <div className="flex">
+            <button
+              className="text-gray-400 hover:text-blue-300 transition-colors px-2"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOverviewChartOpen(true);
+              }}
+              data-no-navigate
+              title="View transaction charts"
+            >
+              <BarChart3 className="w-4 h-4" />
+            </button>
+            <BOMActions job={job} onImportBOM={onImportBOM} />
           </div>
         </div>
       </div>
-      <div className="flex flex-col gap-2 flex-shrink-0 items-end">
-        <div className="flex items-center gap-2">
-          <JobStatusDropdown job={job} />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onEdit(job)}
-            className="border-gray-600 hover:bg-gray-800"
-            data-no-navigate
-          >
-            Edit
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => onDelete(job.id)}
-            data-no-navigate
-          >
-            Delete
-          </Button>
-        </div>
-        <div className="flex">
-          <button
-            className="text-gray-400 hover:text-blue-300 transition-colors px-2"
-            onClick={(e) => {
-              e.stopPropagation();
-              setOverviewChartOpen(true);
-            }}
-            data-no-navigate
-            title="View transaction charts"
-          >
-            <BarChart3 className="w-4 h-4" />
-          </button>
-          <BOMActions job={job} onImportBOM={onImportBOM} />
-        </div>
+
+      <div className="flex justify-center mt-2 mb-2">
+        <JobStatusNavigation job={job} />
       </div>
 
       <TransactionChart
@@ -124,7 +129,7 @@ const JobCardHeader: React.FC<JobCardHeaderProps> = ({
         isOpen={totalProfitChartOpen}
         onClose={() => setTotalProfitChartOpen(false)}
       />
-    </div>
+    </>
   );
 };
 

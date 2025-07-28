@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,7 +22,9 @@ const JobForm: React.FC<JobFormProps> = ({ job, onSubmit, onCancel }) => {
     outputQuantity: job?.outputQuantity || 0,
     status: job?.status || IndJobStatusOptions.Planned,
     projectedCost: job?.projectedCost || 0,
-    projectedRevenue: job?.projectedRevenue || 0
+    projectedRevenue: job?.projectedRevenue || 0,
+    runtime: job?.runtime || 0,
+    parallel: job?.parallel || 1
   });
 
   const [jobDump, setJobDump] = useState('');
@@ -35,7 +38,7 @@ const JobForm: React.FC<JobFormProps> = ({ job, onSubmit, onCancel }) => {
 
     const lines = dumpText.trim().split('\n').filter(line => line.trim());
     
-    if (lines.length >= 3) {
+    if (lines.length >= 4) {
       // Parse first line: "Item Name Quantity"
       const firstLine = lines[0].trim();
       const lastSpaceIndex = firstLine.lastIndexOf(' ');
@@ -44,22 +47,26 @@ const JobForm: React.FC<JobFormProps> = ({ job, onSubmit, onCancel }) => {
         const itemName = firstLine.substring(0, lastSpaceIndex).trim();
         const quantity = parseInt(firstLine.substring(lastSpaceIndex + 1).trim()) || 0;
         
-        // Parse cost (second line)
-        const cost = parseISKAmount(lines[1].replace(/,/g, ''));
+        // Parse runtime (second line)
+        const runtime = parseInt(lines[1].replace(/,/g, '')) || 0;
         
-        // Parse revenue (third line)
-        const revenue = parseISKAmount(lines[2].replace(/,/g, ''));
+        // Parse cost (third line)
+        const cost = parseISKAmount(lines[2].replace(/,/g, ''));
+        
+        // Parse revenue (fourth line)
+        const revenue = parseISKAmount(lines[3].replace(/,/g, ''));
         
         setFormData(prev => ({
           ...prev,
           outputItem: itemName,
           outputQuantity: quantity,
+          runtime: runtime,
           projectedCost: cost,
           projectedRevenue: revenue
         }));
 
-        // Parse BOM - everything after the first 3 lines is BOM
-        const bomLines = lines.slice(3); // Start from line 4 (index 3)
+        // Parse BOM - everything after the first 4 lines is BOM
+        const bomLines = lines.slice(4); // Start from line 5 (index 4)
         const billOfMaterials: { name: string; quantity: number }[] = [];
         
         for (const line of bomLines) {
@@ -95,7 +102,9 @@ const JobForm: React.FC<JobFormProps> = ({ job, onSubmit, onCancel }) => {
       outputQuantity: formData.outputQuantity,
       status: formData.status,
       projectedCost: formData.projectedCost,
-      projectedRevenue: formData.projectedRevenue
+      projectedRevenue: formData.projectedRevenue,
+      runtime: formData.runtime,
+      parallel: formData.parallel
     }, parsedBillOfMaterials.length > 0 ? parsedBillOfMaterials : undefined);
   };
 
@@ -159,7 +168,34 @@ const JobForm: React.FC<JobFormProps> = ({ job, onSubmit, onCancel }) => {
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="runtime" className="text-gray-300">Runtime (seconds)</Label>
+              <Input
+                id="runtime"
+                type="number"
+                value={formData.runtime}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  runtime: parseInt(e.target.value) || 0
+                })}
+                className="bg-gray-800 border-gray-600 text-white"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="parallel" className="text-gray-300">Parallel Jobs</Label>
+              <Input
+                id="parallel"
+                type="number"
+                min="1"
+                value={formData.parallel}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  parallel: Math.max(1, parseInt(e.target.value) || 1)
+                })}
+                className="bg-gray-800 border-gray-600 text-white"
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="projectedCost" className="text-gray-300">Projected Cost</Label>
               <Input
@@ -194,7 +230,7 @@ const JobForm: React.FC<JobFormProps> = ({ job, onSubmit, onCancel }) => {
               id="jobDump"
               value={jobDump}
               onChange={handleJobDumpChange}
-              placeholder="Paste job dump here:&#10;&#10;Standup Light Guided Bomb 100&#10;285,224,182&#10;771,342,930&#10;&#10;Megacyte 37&#10;Zydrine 84&#10;..."
+              placeholder="Paste job dump here:&#10;&#10;Discovery Survey Probe I 800&#10;468000&#10;158,670,288&#10;237,484,800&#10;&#10;Tritanium 8888800&#10;Pyerite 711200&#10;..."
               className="bg-gray-800 border-gray-600 text-white min-h-[120px]"
               rows={6}
             />

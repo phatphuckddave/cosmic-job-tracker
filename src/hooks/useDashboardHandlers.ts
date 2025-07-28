@@ -16,6 +16,9 @@ interface DashboardHandlersProps {
   loadingStatuses: Set<string>;
 }
 
+// Statuses that need attention checking
+const ATTENTION_STATUSES = ['Acquisition', 'Running', 'Selling'];
+
 export function useDashboardHandlers({
   createJob,
   updateJob,
@@ -104,7 +107,8 @@ export function useDashboardHandlers({
     setCollapsedGroups(newState);
     localStorage.setItem('jobGroupsCollapsed', JSON.stringify(newState));
 
-    if (collapsedGroups[status] && !loadingStatuses.has(status)) {
+    // If we're opening a group that needs attention checking, load its jobs
+    if (collapsedGroups[status] && ATTENTION_STATUSES.includes(status) && !loadingStatuses.has(status)) {
       await loadJobsForStatuses([status]);
       
       setTimeout(() => {
